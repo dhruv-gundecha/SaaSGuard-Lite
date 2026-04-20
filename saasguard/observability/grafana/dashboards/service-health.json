@@ -1,0 +1,168 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_requests_total[5m])) * 60",
+          "legendFormat": "requests/min"
+        }
+      ],
+      "title": "API Requests Per Minute",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(saasguard_api_requests_total[5m])), 1)",
+          "legendFormat": "api error rate"
+        }
+      ],
+      "title": "API Error Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_auth_failures_total[5m]))",
+          "legendFormat": "auth failures"
+        }
+      ],
+      "title": "Auth Failure Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_worker_jobs_started_total[5m]))",
+          "legendFormat": "started"
+        },
+        {
+          "expr": "sum(rate(saasguard_worker_jobs_completed_total[5m]))",
+          "legendFormat": "completed"
+        },
+        {
+          "expr": "sum(rate(saasguard_worker_jobs_failed_total[5m]))",
+          "legendFormat": "failed"
+        }
+      ],
+      "title": "Worker Job Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "saasguard_queue_backlog_jobs",
+          "legendFormat": "queued jobs"
+        },
+        {
+          "expr": "saasguard_oldest_pending_job_age_seconds",
+          "legendFormat": "oldest pending age"
+        }
+      ],
+      "title": "Queue Backlog",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_worker_minio_upload_failures_total[5m]))",
+          "legendFormat": "MinIO upload failures"
+        },
+        {
+          "expr": "sum(rate(saasguard_worker_db_query_failures_total[5m]))",
+          "legendFormat": "DB query failures"
+        }
+      ],
+      "title": "Dependency Failures",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["saasguard"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Service Health",
+  "uid": "saasguard-service-health",
+  "version": 1
+}
