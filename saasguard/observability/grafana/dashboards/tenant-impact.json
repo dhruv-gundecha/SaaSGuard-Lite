@@ -1,0 +1,148 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum by (tenant_id) (increase(saasguard_worker_jobs_failed_total[6h]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ],
+      "title": "Failed Jobs By Tenant",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (tenant_id) (increase(saasguard_worker_jobs_completed_total[6h]))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ],
+      "title": "Completed Jobs By Tenant",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum by (tenant_id) (saasguard_api_export_requests_created_total)",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ],
+      "title": "Queued Jobs By Tenant",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum by (tenant_id) (rate(saasguard_worker_job_duration_seconds_sum[15m])) / clamp_min(sum by (tenant_id) (rate(saasguard_worker_job_duration_seconds_count[15m])), 1)",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ],
+      "title": "Average Export Latency By Tenant",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "count(count by (tenant_id) (saasguard_worker_jobs_failed_total) > 0)",
+          "legendFormat": "affected tenants"
+        }
+      ],
+      "title": "Affected Tenants Count",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "topk(10, sum by (tenant_id) (increase(saasguard_api_export_requests_created_total[6h])))",
+          "legendFormat": "{{tenant_id}}"
+        }
+      ],
+      "title": "Top Tenants By Job Volume",
+      "type": "barchart"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["saasguard"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Tenant Impact",
+  "uid": "saasguard-tenant-impact",
+  "version": 1
+}

@@ -1,0 +1,148 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_auth_failures_total[5m]))",
+          "legendFormat": "token validation failures"
+        }
+      ],
+      "title": "Token Validation Failures",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "sum by (action) (rate(saasguard_api_authorization_denials_total[5m]))",
+          "legendFormat": "{{action}}"
+        }
+      ],
+      "title": "Authorization Denials",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_job_read_denials_total[5m]))",
+          "legendFormat": "cross-tenant denials"
+        }
+      ],
+      "title": "Cross-Tenant Job Access Denials",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum by (role) (increase(saasguard_api_export_requests_created_total[6h]))",
+          "legendFormat": "{{role}}"
+        }
+      ],
+      "title": "Export Requests By Role",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "topk(10, sum by (keycloak_sub) (count_over_time({compose_service=\"api\"} | json | outcome=\"denied\" [1h])))",
+          "legendFormat": "{{keycloak_sub}}"
+        }
+      ],
+      "title": "Repeated Failures By Subject",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "{compose_service=\"api\"} | json | event_name=~\"export.request_received|job.read_allowed|job.read_denied|auth.authorization_denied\"",
+          "legendFormat": "audit-related events"
+        }
+      ],
+      "title": "Auth and Job Events",
+      "type": "logs"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["saasguard"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "title": "Auth and Security",
+  "uid": "saasguard-auth-security",
+  "version": 1
+}

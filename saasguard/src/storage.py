@@ -49,3 +49,14 @@ def upload_csv(object_key: str, content: bytes) -> None:
         Key=object_key,
         ExtraArgs={"ContentType": "text/csv"},
     )
+
+
+def create_presigned_download_url(object_key: str) -> str:
+    settings = get_settings()
+    ensure_bucket_exists()
+    client = get_s3_client()
+    return client.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.minio_bucket, "Key": object_key},
+        ExpiresIn=settings.minio_presign_expiry_seconds,
+    )

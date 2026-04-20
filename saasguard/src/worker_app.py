@@ -1,16 +1,14 @@
-from celery import Celery
+from prometheus_client import start_http_server
 
+from src.celery_app import celery_app
 from src.config import get_settings
+from src.logging_utils import configure_logging
+from src.migrations import run_migrations
 
 
 settings = get_settings()
-
-celery_app = Celery("saasguard_lite", broker=settings.redis_url)
-celery_app.conf.update(
-    task_default_queue="exports",
-    task_serializer="json",
-    accept_content=["json"],
-    result_backend=None,
-)
+configure_logging()
+run_migrations()
+start_http_server(settings.worker_metrics_port)
 
 celery_app.autodiscover_tasks(["src"])
