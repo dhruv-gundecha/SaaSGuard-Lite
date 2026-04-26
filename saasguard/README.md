@@ -354,3 +354,11 @@ Monitor design guidance:
 - Observability config: [observability/prometheus/prometheus.yml](/home/darthdg/saasguard/observability/prometheus/prometheus.yml), [observability/promtail/config.yml](/home/darthdg/saasguard/observability/promtail/config.yml)
 - Architecture notes: [docs/architecture.md](/home/darthdg/saasguard/docs/architecture.md)
 - Incident runbook: [docs/incident-runbook.md](/home/darthdg/saasguard/docs/incident-runbook.md)
+
+## Automated tests
+
+Run the automated tests with:
+
+```bash
+pytest
+```
