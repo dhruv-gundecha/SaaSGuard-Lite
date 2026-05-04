@@ -91,6 +91,22 @@ npm install
 npm run dev
 ```
 
+## CI/CD
+
+Local test command:
+
+```bash
+docker compose run --rm -v "$PWD:/app" api pytest -v
+```
+
+GitHub Actions runs the same pytest suite inside the API container on every push and pull request.
+
+The current automated tests validate:
+
+- functional export creation through `POST /exports`
+- cross-tenant authorization denial for `GET /jobs/{job_id}`
+- worker reconstruction of authoritative job context from the database before export processing
+
 ## Local endpoints
 
 - API: `http://localhost:8000`
