@@ -376,5 +376,7 @@ Monitor design guidance:
 Run the automated tests with:
 
 ```bash
-pytest
+docker compose run --rm -v "$PWD:/app" api pytest -v
 ```
+
+Run that command from inside the `saasguard/` directory.
