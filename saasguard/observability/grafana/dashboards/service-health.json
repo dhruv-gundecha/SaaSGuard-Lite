@@ -149,6 +149,77 @@
       ],
       "title": "Dependency Failures",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_export_requests_created_total[5m]))",
+          "legendFormat": "exports requested"
+        }
+      ],
+      "title": "Export Request Rate",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_worker_jobs_failed_total[5m]))",
+          "legendFormat": "failed"
+        },
+        {
+          "expr": "sum(rate(saasguard_worker_job_retries_total[5m]))",
+          "legendFormat": "retries"
+        }
+      ],
+      "title": "Worker Failures and Retries",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(saasguard_api_request_latency_seconds_bucket[5m])))",
+          "legendFormat": "api p95"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(saasguard_worker_queue_wait_seconds_bucket[15m])))",
+          "legendFormat": "queue wait p95"
+        }
+      ],
+      "title": "Latency and Queue Wait P95",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -164,5 +235,5 @@
   },
   "title": "Service Health",
   "uid": "saasguard-service-health",
-  "version": 1
+  "version": 2
 }

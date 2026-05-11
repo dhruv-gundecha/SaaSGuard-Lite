@@ -129,6 +129,71 @@
       ],
       "title": "Auth and Job Events",
       "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_api_requests_total{path=\"/exports\",method=\"POST\"}[5m]))",
+          "legendFormat": "POST /exports"
+        },
+        {
+          "expr": "sum(rate(saasguard_api_export_requests_created_total[5m]))",
+          "legendFormat": "jobs created"
+        }
+      ],
+      "title": "Export Burst Signal",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "{compose_service=\"api\"} | json | event_name=\"auth.token_rejected\""
+        }
+      ],
+      "title": "Token Rejection Events",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "{compose_service=\"api\"} | json | event_name=\"job.read_denied\""
+        }
+      ],
+      "title": "Cross-Tenant Denial Events",
+      "type": "logs"
     }
   ],
   "refresh": "30s",
@@ -144,5 +209,5 @@
   },
   "title": "Auth and Security",
   "uid": "saasguard-auth-security",
-  "version": 1
+  "version": 2
 }
