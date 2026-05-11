@@ -101,6 +101,12 @@ docker compose run --rm -v "$PWD:/app" api pytest -v
 
 GitHub Actions runs the same pytest suite inside the API container on every push and pull request.
 
+Operational risk deliverables added in this repo include:
+
+- [docs/customer-disruption-risks.md](/home/darthdg/saasguard/docs/customer-disruption-risks.md) for the highest customer-impacting disruption scenarios
+- [docs/manual-tests-and-missing-alerts.md](/home/darthdg/saasguard/docs/manual-tests-and-missing-alerts.md) for manual drills and remaining OE alert coverage gaps
+- risk-focused pytest coverage for health, auth-failure signaling, queue payload trust boundaries, cross-tenant access denial, and safe worker failure handling
+
 The current automated tests validate:
 
 - functional export creation through `POST /exports`
