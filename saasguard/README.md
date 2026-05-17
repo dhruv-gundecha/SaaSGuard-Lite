@@ -107,6 +107,8 @@ Operational risk deliverables added in this repo include:
 - [docs/manual-tests-and-missing-alerts.md](/home/darthdg/saasguard/docs/manual-tests-and-missing-alerts.md) for manual drills and remaining OE alert coverage gaps
 - risk-focused pytest coverage for health, auth-failure signaling, queue payload trust boundaries, cross-tenant access denial, and safe worker failure handling
 
+The product now also includes an Operations Overview command center on the frontend `Operations` page. It reads `GET /operations/summary`, summarizes API health, export pipeline state, worker reliability, security signals, dependency health, and release-regression hints, and then deep-links operators into Grafana, Loki, Prometheus, Uptime Kuma, and MinIO for detailed investigation.
+
 The current automated tests validate:
 
 - functional export creation through `POST /exports`

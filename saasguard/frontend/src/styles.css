@@ -200,6 +200,11 @@ select {
   font-size: 1.8rem;
 }
 
+.metric-card small,
+.dependency-card small {
+  color: #8fa6bb;
+}
+
 .metric-danger {
   border-color: rgba(255, 123, 123, 0.28);
 }
@@ -321,9 +326,20 @@ select {
 }
 
 .status-failed,
-.status-denied {
+.status-denied,
+.status-unhealthy {
   background: rgba(240, 84, 84, 0.12);
   color: #ff9c9c;
+}
+
+.status-healthy {
+  background: rgba(85, 194, 127, 0.12);
+  color: #8de2a1;
+}
+
+.status-degraded {
+  background: rgba(252, 186, 3, 0.12);
+  color: #ffd36b;
 }
 
 .table-panel {
@@ -366,6 +382,46 @@ select {
   background: rgba(4, 9, 15, 0.82);
   border: 1px solid rgba(184, 205, 224, 0.1);
   overflow-x: auto;
+}
+
+.operations-hero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.operations-hero-status {
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.operations-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.operations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dependency-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dependency-card {
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(184, 205, 224, 0.12);
+  background: rgba(6, 13, 21, 0.72);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .panel-header-inline {
@@ -443,8 +499,14 @@ select {
   }
 
   .two-column,
+  .operations-grid,
   .metrics-grid,
-  .detail-grid {
+  .detail-grid,
+  .dependency-grid {
     grid-template-columns: 1fr;
+  }
+
+  .operations-hero {
+    flex-direction: column;
   }
 }

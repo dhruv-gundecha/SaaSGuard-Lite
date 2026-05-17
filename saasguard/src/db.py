@@ -395,6 +395,76 @@ def get_operations_summary(*, tenant_id: str) -> dict[str, Any]:
         }
 
 
+def get_operations_overview(*, tenant_id: str) -> dict[str, Any]:
+    with get_db_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'queued') AS queued_jobs,
+                COUNT(*) FILTER (WHERE status = 'retry_pending') AS retry_pending_jobs,
+                COUNT(*) FILTER (WHERE status = 'processing') AS processing_jobs,
+                COUNT(*) FILTER (
+                    WHERE status = 'completed'
+                      AND completed_at >= NOW() - INTERVAL '1 hour'
+                ) AS completed_jobs_last_hour,
+                COUNT(*) FILTER (
+                    WHERE status = 'failed'
+                      AND completed_at >= NOW() - INTERVAL '1 hour'
+                ) AS failed_jobs_last_hour,
+                COUNT(*) FILTER (
+                    WHERE started_at >= NOW() - INTERVAL '1 hour'
+                ) AS jobs_started_last_hour,
+                COALESCE(
+                    SUM(retry_count) FILTER (
+                        WHERE updated_at >= NOW() - INTERVAL '1 hour'
+                    ),
+                    0
+                ) AS retry_count_last_hour,
+                COUNT(*) FILTER (
+                    WHERE status = 'failed'
+                      AND failure_stage = 'upload'
+                      AND completed_at >= NOW() - INTERVAL '1 hour'
+                ) AS minio_upload_failures_last_hour,
+                EXTRACT(
+                    EPOCH FROM (
+                        NOW() - MIN(created_at) FILTER (WHERE status IN ('queued', 'retry_pending'))
+                    )
+                ) AS oldest_pending_job_age_seconds,
+                COUNT(*) FILTER (
+                    WHERE tenant_id = %s
+                      AND status IN ('queued', 'retry_pending')
+                ) AS active_tenant_backlog
+            FROM export_jobs
+            """,
+            (tenant_id,),
+        )
+        job_summary = cur.fetchone() or {}
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) FILTER (
+                    WHERE outcome = 'denied'
+                      AND event_time >= NOW() - INTERVAL '1 hour'
+                ) AS authorization_denials_last_hour,
+                COUNT(*) FILTER (
+                    WHERE outcome = 'denied'
+                      AND reason = 'cross-tenant access denied'
+                      AND event_time >= NOW() - INTERVAL '1 hour'
+                ) AS cross_tenant_denials_last_hour
+            FROM audit_events
+            """
+        )
+        audit_summary = cur.fetchone() or {}
+        return {
+            **job_summary,
+            **audit_summary,
+            "oldest_pending_job_age_seconds": (
+                job_summary.get("oldest_pending_job_age_seconds") or 0
+            ),
+            "db_query_failures_last_hour": 0,
+        }
+
+
 def get_worker_stats() -> dict[str, Any]:
     with get_db_connection() as conn, conn.cursor() as cur:
         cur.execute(
