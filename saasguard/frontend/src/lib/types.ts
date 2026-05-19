@@ -69,23 +69,91 @@ export interface AuditResponse {
 }
 
 export interface OperationsSummaryResponse {
-  tenant_id: string;
-  tenant_name: string;
-  summary: {
-    queued_jobs: number;
-    failed_jobs: number;
-    upload_failures_last_24h: number;
-    completed_jobs_last_24h: number;
-    authorization_denials_last_24h: number;
+  generated_at: string;
+  scope: {
+    tenant_id: string;
+    tenant_name: string;
+    role: Role;
   };
-  global_queue: {
-    queued_jobs: number;
-    oldest_pending_job_age_seconds: number;
+  overall_status: "healthy" | "degraded" | "unhealthy";
+  api: {
+    status: "healthy" | "degraded" | "unhealthy";
+    window_minutes: number;
+    request_count: number;
+    request_rate: number;
+    error_count: number;
+    error_rate: number;
+    auth_failure_count: number;
+    authorization_denial_count: number;
+    p95_latency_ms: number;
+    impact: string;
+  };
+  exports: {
+    status: "healthy" | "degraded" | "unhealthy";
+    queued: number;
+    retry_pending: number;
+    processing: number;
+    completed_last_hour: number;
+    failed_last_hour: number;
+    oldest_pending_age_seconds: number;
+    impact: string;
+  };
+  worker: {
+    status: "healthy" | "degraded" | "unhealthy";
+    jobs_started: number;
+    jobs_completed: number;
+    jobs_failed: number;
+    retry_count: number;
+    minio_upload_failures: number;
+    db_query_failures: number;
+    jobs_started_last_hour: number;
+    jobs_failed_last_hour: number;
+    retries_last_hour: number;
+    impact: string;
+  };
+  security: {
+    status: "healthy" | "degraded" | "unhealthy";
+    auth_failures: number;
+    authorization_denials: number;
+    cross_tenant_denials: number;
+    impact: string;
+  };
+  dependencies: {
+    status: "healthy" | "degraded" | "unhealthy";
+    postgres: {
+      status: "healthy" | "degraded" | "unhealthy";
+      latency_ms: number | null;
+      reason: string;
+    };
+    redis: {
+      status: "healthy" | "degraded" | "unhealthy";
+      latency_ms: number | null;
+      reason: string;
+    };
+    minio: {
+      status: "healthy" | "degraded" | "unhealthy";
+      latency_ms: number | null;
+      reason: string;
+    };
+    keycloak: {
+      status: "healthy" | "degraded" | "unhealthy";
+      latency_ms: number | null;
+      reason: string;
+    };
+  };
+  deployment: {
+    status: "healthy" | "degraded" | "unhealthy";
+    suspected_regression: boolean;
+    impact: string;
   };
   links: {
     grafana: string;
+    grafana_service_health: string;
+    grafana_tenant_impact: string;
+    grafana_auth_security: string;
     prometheus: string;
     loki: string;
+    uptime_kuma: string;
     minio_console: string;
   };
 }

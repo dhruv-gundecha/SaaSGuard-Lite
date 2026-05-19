@@ -1,5 +1,5 @@
 import { useAuthedQuery } from "../hooks/useAuthedQuery";
-import { formatRelativeMinutes } from "../lib/format";
+import { formatDurationSeconds, formatMillis, formatPercent } from "../lib/format";
 import { OperationsSummaryResponse } from "../lib/types";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorPanel } from "../components/ErrorPanel";
@@ -68,30 +68,30 @@ export function HomePage() {
         <ErrorPanel message={summary.error} />
       ) : summary.data ? (
         <div className="grid metrics-grid">
-          <MetricCard label="Queued jobs" value={summary.data.summary.queued_jobs} />
+          <MetricCard label="Overall health" value={summary.data.overall_status} />
           <MetricCard
-            label="Failed jobs"
-            tone={summary.data.summary.failed_jobs > 0 ? "danger" : "neutral"}
-            value={summary.data.summary.failed_jobs}
+            label="API p95 latency"
+            tone={summary.data.api.status === "unhealthy" ? "danger" : summary.data.api.status === "degraded" ? "neutral" : "success"}
+            value={formatMillis(summary.data.api.p95_latency_ms)}
           />
           <MetricCard
-            label="Completed (24h)"
+            label="Completed (1h)"
             tone="success"
-            value={summary.data.summary.completed_jobs_last_24h}
+            value={summary.data.exports.completed_last_hour}
           />
           <MetricCard
-            label="Auth denials (24h)"
-            tone={summary.data.summary.authorization_denials_last_24h > 0 ? "danger" : "neutral"}
-            value={summary.data.summary.authorization_denials_last_24h}
+            label="API 5xx rate"
+            tone={summary.data.api.error_rate > 0.02 ? "danger" : "neutral"}
+            value={formatPercent(summary.data.api.error_rate)}
           />
           <MetricCard
-            label="Upload failures (24h)"
-            tone={summary.data.summary.upload_failures_last_24h > 0 ? "danger" : "neutral"}
-            value={summary.data.summary.upload_failures_last_24h}
+            label="Backlog"
+            tone={summary.data.exports.status === "unhealthy" ? "danger" : "neutral"}
+            value={summary.data.exports.queued + summary.data.exports.retry_pending}
           />
           <MetricCard
             label="Oldest pending job"
-            value={formatRelativeMinutes(summary.data.global_queue.oldest_pending_job_age_seconds / 60)}
+            value={formatDurationSeconds(summary.data.exports.oldest_pending_age_seconds)}
           />
         </div>
       ) : null}

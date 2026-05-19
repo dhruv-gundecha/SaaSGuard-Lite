@@ -35,6 +35,7 @@ from src.metrics import (
     queue_backlog_jobs,
 )
 from src.migrations import bootstrap_database
+from src.operations import build_operations_summary, record_api_request_observation
 from src.seed_dev_data import ensure_dev_seed_data
 from src.storage import create_presigned_download_url
 from src.tasks import export_job
@@ -75,41 +76,38 @@ async def request_context_middleware(request: Request, call_next):
         service="api",
     )
     started_at = time.perf_counter()
+    response = None
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
     try:
         response = await call_next(request)
+        status_code = response.status_code
     except HTTPException as exc:
-        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
-            api_auth_failures_total.inc()
-        if exc.status_code == status.HTTP_403_FORBIDDEN:
-            api_authorization_denials_total.labels(action=request.url.path).inc()
+        status_code = exc.status_code
+        raise
+    finally:
+        latency_seconds = time.perf_counter() - started_at
+        api_request_latency_seconds.labels(
+            method=request.method, path=request.url.path
+        ).observe(latency_seconds)
         api_requests_total.labels(
             method=request.method,
             path=request.url.path,
-            status_code=str(exc.status_code),
+            status_code=str(status_code),
         ).inc()
-        raise
-    finally:
-        api_request_latency_seconds.labels(
-            method=request.method, path=request.url.path
-        ).observe(time.perf_counter() - started_at)
+        record_api_request_observation(status_code, latency_seconds)
+        if status_code == status.HTTP_401_UNAUTHORIZED:
+            api_auth_failures_total.inc()
+        elif status_code == status.HTTP_403_FORBIDDEN:
+            api_authorization_denials_total.labels(action=request.url.path).inc()
         reset_request_context(tokens)
-
-    api_requests_total.labels(
-        method=request.method,
-        path=request.url.path,
-        status_code=str(response.status_code),
-    ).inc()
-    response.headers["X-Request-ID"] = request_id
-    response.headers["X-Correlation-ID"] = correlation_id
+    if response is not None:
+        response.headers["X-Request-ID"] = request_id
+        response.headers["X-Correlation-ID"] = correlation_id
     return response
 
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    if exc.status_code == status.HTTP_401_UNAUTHORIZED:
-        api_auth_failures_total.inc()
-    elif exc.status_code == status.HTTP_403_FORBIDDEN:
-        api_authorization_denials_total.labels(action=request.url.path).inc()
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
@@ -465,20 +463,8 @@ def read_operations_summary(
         correlation_id=correlation_id,
         action="operations.viewed",
     )
-    summary = get_operations_summary(tenant_id=tenant.tenant_id)
-    stats = get_worker_stats()
-    return {
-        "tenant_id": tenant.tenant_id,
-        "tenant_name": tenant.tenant_name,
-        "summary": summary,
-        "global_queue": {
-            "queued_jobs": stats["queued_jobs"] or 0,
-            "oldest_pending_job_age_seconds": stats["oldest_pending_job_age_seconds"] or 0,
-        },
-        "links": {
-            "grafana": "http://localhost:3000",
-            "prometheus": "http://localhost:9090",
-            "loki": "http://localhost:3100",
-            "minio_console": "http://localhost:9001",
-        },
-    }
+    return build_operations_summary(
+        tenant_id=tenant.tenant_id,
+        tenant_name=tenant.tenant_name,
+        role=tenant.role,
+    )

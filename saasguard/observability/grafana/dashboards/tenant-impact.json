@@ -64,7 +64,7 @@
           "legendFormat": "{{tenant_id}}"
         }
       ],
-      "title": "Queued Jobs By Tenant",
+      "title": "Export Requests By Tenant",
       "type": "barchart"
     },
     {
@@ -129,6 +129,81 @@
       ],
       "title": "Top Tenants By Job Volume",
       "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "saasguard_queue_backlog_jobs",
+          "legendFormat": "queued jobs"
+        },
+        {
+          "expr": "saasguard_oldest_pending_job_age_seconds",
+          "legendFormat": "oldest pending age"
+        }
+      ],
+      "title": "Global Queue Pressure",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "id": 8,
+      "targets": [
+        {
+          "expr": "sum by (stage) (rate(saasguard_worker_job_retries_total[5m]))",
+          "legendFormat": "retry {{stage}}"
+        },
+        {
+          "expr": "sum by (stage) (rate(saasguard_worker_jobs_failed_total[5m]))",
+          "legendFormat": "failed {{stage}}"
+        }
+      ],
+      "title": "Worker Retry and Failure Stages",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "id": 9,
+      "targets": [
+        {
+          "expr": "sum(rate(saasguard_worker_minio_upload_failures_total[5m]))",
+          "legendFormat": "MinIO upload failures"
+        },
+        {
+          "expr": "sum(rate(saasguard_worker_db_query_failures_total[5m]))",
+          "legendFormat": "DB query failures"
+        }
+      ],
+      "title": "Worker Dependency Failures",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -144,5 +219,5 @@
   },
   "title": "Tenant Impact",
   "uid": "saasguard-tenant-impact",
-  "version": 1
+  "version": 2
 }
