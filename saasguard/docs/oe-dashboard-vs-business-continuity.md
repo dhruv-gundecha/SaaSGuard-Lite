@@ -5,14 +5,14 @@ This document compares the original business-risk analysis with what the current
 ## Tenant Data Exposure
 
 - **Business impact:** legal exposure, severe trust loss, and incident-response obligations if one tenant can access another tenant’s data.
-- **Current OE coverage:** partial. The Operations page shows authorization denials and cross-tenant denial counts and routes operators into auth and log investigation quickly.
+- **Current OE coverage:** partial to moderate. The Operations page shows authorization denials and cross-tenant denial counts and routes operators into auth and log investigation quickly. The Grafana `Auth and Security` dashboard was also re-verified on `2026-05-18` so auth-token rejection bursts and denied-event volume render even on a quiet local stack.
 - **Remaining gap:** the dashboard can detect denied attempts, but it cannot prove the absence of a successful exposure. Automated isolation tests and code review still do the heavier lifting.
 - **Future improvement:** add explicit alerting on cross-tenant denial spikes and correlate them with audit-event patterns in Grafana/Loki.
 
 ## Export Misconfiguration or Pipeline Failure
 
 - **Business impact:** customers request exports but never receive them, which makes the core product appear broken.
-- **Current OE coverage:** strong. The Operations page summarizes queue depth, retry-pending work, processing jobs, completed-last-hour, failed-last-hour, oldest pending age, and worker instability.
+- **Current OE coverage:** strong. The Operations page summarizes queue depth, retry-pending work, processing jobs, completed-last-hour, failed-last-hour, oldest pending age, and worker instability. The Grafana `Tenant Impact` dashboard was also re-verified against live MinIO outage behavior so failed uploads no longer appear as zero while Loki shows real worker errors.
 - **Remaining gap:** the current view is more global than tenant-cohort specific. It does not yet explain whether a failure wave began after a deployment, a data anomaly, or a dependency outage without operator follow-up.
 - **Future improvement:** add release markers and more explicit per-stage export failure trends.
 
@@ -54,6 +54,6 @@ This document compares the original business-risk analysis with what the current
 ## Weak Observability
 
 - **Business impact:** slower triage, longer outages, and weaker confidence during security-relevant incidents.
-- **Current OE coverage:** improved materially. The product now acts as an operational command center with direct connections to business-impact questions and investigation tools.
+- **Current OE coverage:** improved materially. The product now acts as an operational command center with direct connections to business-impact questions and investigation tools. This repo now explicitly verifies that Prometheus/Grafana worker failure signals agree with the live worker failure path and that Loki auth-event queries align with real API-emitted JSON events.
 - **Remaining gap:** it still depends on external observability systems for deep investigation, and some high-value alert rules remain documented rather than automated.
 - **Future improvement:** add stronger alerting, deployment markers, worker heartbeat signals, and richer incident context on the Operations page without turning it into a second observability stack.

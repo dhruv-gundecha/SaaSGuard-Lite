@@ -118,6 +118,22 @@
           "temporary": false
         }
       ]
+    },
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "username": "soc",
+      "firstName": "Sam",
+      "lastName": "SOC",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "soc@saasguard.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "soc-password",
+          "temporary": false
+        }
+      ]
     }
   ]
 }

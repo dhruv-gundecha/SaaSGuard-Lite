@@ -26,7 +26,7 @@ export function LoginPage() {
         <div className="seed-accounts">
           <div>
             <strong>Seeded users</strong>
-            <p>`alice`, `bob`, and multi-tenant `carol` are available with seeded tenants and demo job history.</p>
+            <p>`alice`, `bob`, multi-tenant `carol`, and internal operator `soc` are available with seeded tenants and demo job history.</p>
           </div>
         </div>
 

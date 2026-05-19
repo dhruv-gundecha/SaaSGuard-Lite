@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS users (
     keycloak_sub TEXT NOT NULL UNIQUE,
     username TEXT NOT NULL UNIQUE,
     email TEXT,
+    internal_role TEXT CHECK (internal_role IN ('soc_admin', 'ops_admin')),
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

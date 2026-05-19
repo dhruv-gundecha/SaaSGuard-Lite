@@ -324,8 +324,8 @@ def _impact_copy(status: str, *, healthy: str, degraded: str, unhealthy: str) ->
     return healthy
 
 
-def build_operations_summary(*, tenant_id: str, tenant_name: str, role: str) -> dict[str, Any]:
-    operations = get_operations_overview(tenant_id=tenant_id)
+def build_operations_summary(*, role: str) -> dict[str, Any]:
+    operations = get_operations_overview()
     dependencies = collect_dependency_health()
     api_activity = summarize_recent_api_activity()
     worker_totals = collect_worker_metric_totals()
@@ -349,8 +349,7 @@ def build_operations_summary(*, tenant_id: str, tenant_name: str, role: str) -> 
     return {
         "generated_at": _utc_now().isoformat(),
         "scope": {
-            "tenant_id": tenant_id,
-            "tenant_name": tenant_name,
+            "type": "global",
             "role": role,
         },
         "overall_status": overall_status,

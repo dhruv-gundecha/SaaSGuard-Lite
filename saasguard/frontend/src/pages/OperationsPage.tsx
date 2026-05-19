@@ -1,8 +1,8 @@
-import { EmptyState } from "../components/EmptyState";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { LoadingState } from "../components/LoadingState";
 import { StatusBadge } from "../components/StatusBadge";
 import { useAuthedQuery } from "../hooks/useAuthedQuery";
+import { canAccessOperations } from "../lib/authorization";
 import {
   formatDecimal,
   formatDurationSeconds,
@@ -30,18 +30,19 @@ function OperationsPageHeader() {
 
 export function OperationsPage() {
   const tenant = useTenant();
+  const operationsAllowed = canAccessOperations(tenant.session);
   const summary = useAuthedQuery<OperationsSummaryResponse>(
-    tenant.activeTenantId ? "/operations/summary" : null,
+    operationsAllowed ? "/operations/summary" : null,
     { pollMs: 15000 },
   );
 
-  if (!tenant.activeTenantId) {
+  if (!operationsAllowed) {
     return (
       <section className="page-section">
         <OperationsPageHeader />
-        <EmptyState
-          title="No tenant selected"
-          description="Choose a tenant to load the live operations summary."
+        <ErrorPanel
+          title="Internal operations access required"
+          message="The global Operations Overview is restricted to internal SOC or operator users because Grafana, Loki, Prometheus, and Uptime Kuma can expose cross-tenant operational data."
         />
       </section>
     );
@@ -66,7 +67,12 @@ export function OperationsPage() {
   }
 
   if (!summary.data) {
-    return null;
+    return (
+      <section className="page-section">
+        <OperationsPageHeader />
+        <ErrorPanel message="Operations summary is unavailable right now." />
+      </section>
+    );
   }
 
   const data = summary.data;
@@ -78,10 +84,10 @@ export function OperationsPage() {
       <div className="panel panel-accent operations-hero">
         <div>
           <span className="eyebrow">Overall health</span>
-          <h3>Tenant isolation and export reliability first</h3>
+          <h3>Global tenant isolation and export reliability</h3>
           <p className="muted">
-            Active tenant: {data.scope.tenant_name} ({data.scope.role}). Last
-            refresh: {new Date(data.generated_at).toLocaleTimeString()}.
+            Internal role: {data.scope.role}. Last refresh:{" "}
+            {new Date(data.generated_at).toLocaleTimeString()}.
           </p>
         </div>
         <div className="operations-hero-status">
@@ -308,7 +314,7 @@ export function OperationsPage() {
           </p>
           <code className="query-block">{`{compose_service="api"} | json | event_name="auth.token_rejected"`}</code>
           <code className="query-block">{`{compose_service="api"} | json | event_name="job.read_denied"`}</code>
-          <code className="query-block">{`{compose_service="worker"} | json | tenant_id="${tenant.activeTenantId}"`}</code>
+          <code className="query-block">{`{compose_service="worker"} | json | event_name="worker.job_failed"`}</code>
         </div>
       </div>
     </section>

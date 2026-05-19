@@ -42,7 +42,7 @@ def resolve_user_by_identity(
                 updated_at = NOW()
             WHERE keycloak_sub = %s
               AND status = 'active'
-            RETURNING id, keycloak_sub, username, email, status, created_at, updated_at
+            RETURNING id, keycloak_sub, username, email, internal_role, status, created_at, updated_at
             """,
             (username, email, keycloak_sub),
         )
@@ -65,7 +65,7 @@ def resolve_user_by_identity(
                     updated_at = NOW()
                 WHERE username = %s
                   AND status = 'active'
-                RETURNING id, keycloak_sub, username, email, status, created_at, updated_at
+                RETURNING id, keycloak_sub, username, email, internal_role, status, created_at, updated_at
                 """,
                 (keycloak_sub, email, username),
             )
@@ -395,7 +395,7 @@ def get_operations_summary(*, tenant_id: str) -> dict[str, Any]:
         }
 
 
-def get_operations_overview(*, tenant_id: str) -> dict[str, Any]:
+def get_operations_overview() -> dict[str, Any]:
     with get_db_connection() as conn, conn.cursor() as cur:
         cur.execute(
             """
@@ -429,14 +429,9 @@ def get_operations_overview(*, tenant_id: str) -> dict[str, Any]:
                     EPOCH FROM (
                         NOW() - MIN(created_at) FILTER (WHERE status IN ('queued', 'retry_pending'))
                     )
-                ) AS oldest_pending_job_age_seconds,
-                COUNT(*) FILTER (
-                    WHERE tenant_id = %s
-                      AND status IN ('queued', 'retry_pending')
-                ) AS active_tenant_backlog
+                ) AS oldest_pending_job_age_seconds
             FROM export_jobs
-            """,
-            (tenant_id,),
+            """
         )
         job_summary = cur.fetchone() or {}
         cur.execute(
@@ -483,3 +478,73 @@ def get_worker_stats() -> dict[str, Any]:
             "queued_jobs": 0,
             "oldest_pending_job_age_seconds": None,
         }
+
+
+def get_export_job_metrics_snapshot(*, stale_processing_minutes: int = 15) -> dict[str, Any]:
+    with get_db_connection() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                tenant_id,
+                status,
+                COUNT(*) AS job_count
+            FROM export_jobs
+            GROUP BY tenant_id, status
+            ORDER BY tenant_id, status
+            """
+        )
+        status_counts = list(cur.fetchall())
+
+        cur.execute(
+            """
+            SELECT
+                tenant_id,
+                status,
+                failure_stage,
+                COUNT(*) AS job_count
+            FROM export_jobs
+            WHERE failure_stage IS NOT NULL
+            GROUP BY tenant_id, status, failure_stage
+            ORDER BY tenant_id, status, failure_stage
+            """
+        )
+        failure_stage_counts = list(cur.fetchall())
+
+        cur.execute(
+            """
+            SELECT
+                tenant_id,
+                AVG(EXTRACT(EPOCH FROM (completed_at - started_at))) AS avg_duration_seconds
+            FROM export_jobs
+            WHERE status = 'completed'
+              AND started_at IS NOT NULL
+              AND completed_at IS NOT NULL
+              AND completed_at >= NOW() - INTERVAL '24 hours'
+            GROUP BY tenant_id
+            ORDER BY tenant_id
+            """
+        )
+        duration_averages = list(cur.fetchall())
+
+        cur.execute(
+            """
+            SELECT
+                tenant_id,
+                COUNT(*) AS stale_processing_jobs
+            FROM export_jobs
+            WHERE status = 'processing'
+              AND started_at IS NOT NULL
+              AND started_at < NOW() - (%s * INTERVAL '1 minute')
+            GROUP BY tenant_id
+            ORDER BY tenant_id
+            """,
+            (stale_processing_minutes,),
+        )
+        stale_processing = list(cur.fetchall())
+
+    return {
+        "status_counts": status_counts,
+        "failure_stage_counts": failure_stage_counts,
+        "duration_averages": duration_averages,
+        "stale_processing": stale_processing,
+    }

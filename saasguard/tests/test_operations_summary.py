@@ -74,14 +74,13 @@ def _base_worker_totals(**overrides):
 
 
 def test_operations_summary_endpoint_returns_expected_structure(
-    client, alice_user, monkeypatch
+    client, soc_user, monkeypatch
 ):
     expected = {
         "generated_at": "2026-05-17T10:00:00+00:00",
         "scope": {
-            "tenant_id": "tenant_alpha",
-            "tenant_name": "Tenant Alpha",
-            "role": "analyst",
+            "type": "global",
+            "role": "soc_admin",
         },
         "overall_status": "healthy",
         "api": {"status": "healthy"},
@@ -93,21 +92,137 @@ def test_operations_summary_endpoint_returns_expected_structure(
         "links": {"grafana": "http://localhost:3000"},
     }
 
-    app.dependency_overrides[get_current_user] = lambda: alice_user
+    app.dependency_overrides[get_current_user] = lambda: soc_user
     monkeypatch.setattr("src.api.build_operations_summary", lambda **_: expected)
 
     response = client.get("/operations/summary")
 
     assert response.status_code == 200
     assert response.json()["overall_status"] == "healthy"
-    assert response.json()["scope"]["tenant_id"] == "tenant_alpha"
+    assert response.json()["scope"]["type"] == "global"
     assert "dependencies" in response.json()
+
+
+def test_operations_summary_denies_analyst_user(client, alice_user, monkeypatch):
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **_: None)
+
+    response = client.get("/operations/summary")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "User does not have sufficient permissions"}
+
+
+def test_operations_summary_denies_viewer_user(client, viewer_user, monkeypatch):
+    app.dependency_overrides[get_current_user] = lambda: viewer_user
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **_: None)
+
+    response = client.get("/operations/summary")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "User does not have sufficient permissions"}
+
+
+def test_operations_summary_denies_tenant_admin_user(client, carol_user, monkeypatch):
+    app.dependency_overrides[get_current_user] = lambda: carol_user
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **_: None)
+
+    response = client.get("/operations/summary", headers={"X-Active-Tenant": "tenant_alpha"})
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "User does not have sufficient permissions"}
+    assert "links" not in response.json()
+
+
+def test_operations_summary_allows_soc_admin_user(client, soc_user, monkeypatch):
+    expected = {
+        "generated_at": "2026-05-17T10:00:00+00:00",
+        "scope": {
+            "type": "global",
+            "role": "soc_admin",
+        },
+        "overall_status": "healthy",
+        "api": {"status": "healthy"},
+        "exports": {"status": "healthy"},
+        "worker": {"status": "healthy"},
+        "security": {"status": "healthy"},
+        "dependencies": {"status": "healthy"},
+        "deployment": {"status": "healthy", "suspected_regression": False},
+        "links": {"grafana": "http://localhost:3000"},
+    }
+
+    app.dependency_overrides[get_current_user] = lambda: soc_user
+    monkeypatch.setattr("src.api.build_operations_summary", lambda **_: expected)
+
+    response = client.get("/operations/summary")
+
+    assert response.status_code == 200
+    assert response.json()["scope"]["role"] == "soc_admin"
+
+
+def test_operations_summary_allows_ops_admin_user(client, ops_user, monkeypatch):
+    expected = {
+        "generated_at": "2026-05-17T10:00:00+00:00",
+        "scope": {
+            "type": "global",
+            "role": "ops_admin",
+        },
+        "overall_status": "healthy",
+        "api": {"status": "healthy"},
+        "exports": {"status": "healthy"},
+        "worker": {"status": "healthy"},
+        "security": {"status": "healthy"},
+        "dependencies": {"status": "healthy"},
+        "deployment": {"status": "healthy", "suspected_regression": False},
+        "links": {"grafana": "http://localhost:3000"},
+    }
+
+    app.dependency_overrides[get_current_user] = lambda: ops_user
+    monkeypatch.setattr("src.api.build_operations_summary", lambda **_: expected)
+
+    response = client.get("/operations/summary")
+
+    assert response.status_code == 200
+    assert response.json()["scope"]["role"] == "ops_admin"
+
+
+def test_me_includes_internal_operations_authorization(client, soc_user):
+    app.dependency_overrides[get_current_user] = lambda: soc_user
+
+    response = client.get("/me")
+
+    assert response.status_code == 200
+    assert response.json()["user"]["internal_role"] == "soc_admin"
+    assert response.json()["authorization"]["can_access_operations"] is True
+
+
+def test_dashboard_summary_remains_tenant_scoped_for_tenant_admin(
+    client, carol_user, monkeypatch
+):
+    app.dependency_overrides[get_current_user] = lambda: carol_user
+    monkeypatch.setattr(
+        "src.api.get_operations_summary",
+        lambda tenant_id: {
+            "queued_jobs": 1,
+            "failed_jobs": 0,
+            "upload_failures_last_24h": 0,
+            "completed_jobs_last_24h": 3,
+            "authorization_denials_last_24h": 1,
+        },
+    )
+
+    response = client.get("/dashboard/summary", headers={"X-Active-Tenant": "tenant_alpha"})
+
+    assert response.status_code == 200
+    assert response.json()["scope"]["tenant_id"] == "tenant_alpha"
+    assert response.json()["scope"]["role"] == "tenant_admin"
+    assert "links" not in response.json()
 
 
 def test_build_operations_summary_avoids_secret_values(monkeypatch):
     monkeypatch.setattr(
         "src.operations.get_operations_overview",
-        lambda tenant_id: _base_operations_overview(),
+        lambda: _base_operations_overview(),
     )
     monkeypatch.setattr(
         "src.operations.collect_dependency_health",
@@ -123,8 +238,6 @@ def test_build_operations_summary_avoids_secret_values(monkeypatch):
     )
 
     summary = build_operations_summary(
-        tenant_id="tenant_alpha",
-        tenant_name="Tenant Alpha",
         role="analyst",
     )
     encoded = json.dumps(summary)
@@ -140,7 +253,7 @@ def test_build_operations_summary_calculates_queue_backlog_and_failed_export_sig
 ):
     monkeypatch.setattr(
         "src.operations.get_operations_overview",
-        lambda tenant_id: _base_operations_overview(
+        lambda: _base_operations_overview(
             queued_jobs=9,
             retry_pending_jobs=4,
             failed_jobs_last_hour=3,
@@ -161,8 +274,6 @@ def test_build_operations_summary_calculates_queue_backlog_and_failed_export_sig
     )
 
     summary = build_operations_summary(
-        tenant_id="tenant_alpha",
-        tenant_name="Tenant Alpha",
         role="analyst",
     )
 
@@ -175,7 +286,7 @@ def test_build_operations_summary_calculates_queue_backlog_and_failed_export_sig
 def test_build_operations_summary_marks_dependency_failure_as_unhealthy(monkeypatch):
     monkeypatch.setattr(
         "src.operations.get_operations_overview",
-        lambda tenant_id: _base_operations_overview(),
+        lambda: _base_operations_overview(),
     )
     monkeypatch.setattr(
         "src.operations.collect_dependency_health",
@@ -194,8 +305,6 @@ def test_build_operations_summary_marks_dependency_failure_as_unhealthy(monkeypa
     )
 
     summary = build_operations_summary(
-        tenant_id="tenant_alpha",
-        tenant_name="Tenant Alpha",
         role="analyst",
     )
 
@@ -207,7 +316,7 @@ def test_build_operations_summary_marks_dependency_failure_as_unhealthy(monkeypa
 def test_build_operations_summary_detects_release_regression_signal(monkeypatch):
     monkeypatch.setattr(
         "src.operations.get_operations_overview",
-        lambda tenant_id: _base_operations_overview(failed_jobs_last_hour=2),
+        lambda: _base_operations_overview(failed_jobs_last_hour=2),
     )
     monkeypatch.setattr(
         "src.operations.collect_dependency_health",
@@ -223,8 +332,6 @@ def test_build_operations_summary_detects_release_regression_signal(monkeypatch)
     )
 
     summary = build_operations_summary(
-        tenant_id="tenant_alpha",
-        tenant_name="Tenant Alpha",
         role="analyst",
     )
 

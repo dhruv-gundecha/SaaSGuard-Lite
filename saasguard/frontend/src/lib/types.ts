@@ -1,4 +1,5 @@
 export type Role = "viewer" | "analyst" | "tenant_admin";
+export type InternalRole = "soc_admin" | "ops_admin";
 export type JobStatus =
   | "queued"
   | "retry_pending"
@@ -17,12 +18,16 @@ export interface SessionUser {
   keycloak_sub: string;
   username: string;
   email: string | null;
+  internal_role: InternalRole | null;
 }
 
 export interface SessionResponse {
   user: SessionUser;
   active_tenant: Membership | null;
   memberships: Membership[];
+  authorization: {
+    can_access_operations: boolean;
+  };
 }
 
 export interface ExportJob {
@@ -71,9 +76,8 @@ export interface AuditResponse {
 export interface OperationsSummaryResponse {
   generated_at: string;
   scope: {
-    tenant_id: string;
-    tenant_name: string;
-    role: Role;
+    type: "global";
+    role: InternalRole;
   };
   overall_status: "healthy" | "degraded" | "unhealthy";
   api: {
@@ -155,6 +159,22 @@ export interface OperationsSummaryResponse {
     loki: string;
     uptime_kuma: string;
     minio_console: string;
+  };
+}
+
+export interface DashboardSummaryResponse {
+  generated_at: string;
+  scope: {
+    tenant_id: string;
+    tenant_name: string;
+    role: Role;
+  };
+  summary: {
+    queued_jobs: number;
+    failed_jobs: number;
+    upload_failures_last_24h: number;
+    completed_jobs_last_24h: number;
+    authorization_denials_last_24h: number;
   };
 }
 

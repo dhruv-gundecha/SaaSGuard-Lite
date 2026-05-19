@@ -2,6 +2,15 @@
 
 The Operations Overview page inside SaaSGuard-Lite is not a replacement for Grafana, Loki, Prometheus, or Uptime Kuma. Its job is to answer the first operational question quickly, show likely business impact, and route the operator to the right detailed tool.
 
+Access to this page is intentionally restricted to internal `soc_admin` or `ops_admin` users. Grafana, Loki, Prometheus, and Uptime Kuma are global observability systems and may contain cross-tenant operational data. Tenant admins should receive tenant-scoped product, status, and audit views instead of raw access to global observability links.
+
+## Dashboard Verification Notes
+
+- The provisioned dashboards were verified against live product behavior rather than only against metric names in code.
+- Loki logs and Prometheus metrics can diverge when the app logs a failure but does not increment a corresponding metric. This observability pass closed that gap for MinIO upload failures and worker failure-stage counters.
+- `Tenant Impact` now combines live worker counters with PostgreSQL-backed gauges so operators can see truthful failed, retry-pending, queued, stale-processing, and successful-latency signals even when seeded demo data exists before new jobs are run.
+- `Auth and Security` was rechecked against the current local stack on `2026-05-18`. The authorization-denial panel now falls back to a labeled zero series when no `403` route labels exist yet, and the denied-event volume panel now groups by `event_name` so invalid-token bursts still appear even when no subject is known.
+
 ## 1. Is the application healthy and available?
 
 - **Primary source:** Product Operations Overview page, backed by `GET /operations/summary`
@@ -48,6 +57,7 @@ The Operations Overview page inside SaaSGuard-Lite is not a replacement for Graf
 - **Detailed source:** Grafana `Auth and Security`, Loki
 - **Why it matters:** rising denials can indicate role drift, broken membership logic, or malicious probing. All of those affect customer trust and support load.
 - **How to investigate:** compare auth failures, authorization denials, and cross-tenant denials. Open the auth dashboard, then inspect Loki for `auth.token_rejected`, `auth.authorization_denied`, and `job.read_denied`.
+- **Dashboard note:** denied-event volume is intentionally grouped by event type rather than by subject because some rejected tokens have no resolved subject identifier.
 - **Remaining gap:** the product page shows current signals but not actor-level grouping or long-term baselines; Grafana and Loki remain necessary for pattern analysis.
 
 ## 7. Is there evidence of possible cross-tenant access attempts?

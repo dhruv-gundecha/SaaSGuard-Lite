@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import csv
+import io
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
@@ -7,6 +9,7 @@ from uuid import UUID
 from src.config import get_settings
 from src.db import get_db_connection
 from src.migrations import bootstrap_database, get_required_table_names, verify_required_tables_exist
+from src.storage import upload_csv
 
 
 logger = logging.getLogger("saasguard.seed")
@@ -21,6 +24,7 @@ DEMO_USERS = (
         "keycloak_sub": "11111111-1111-1111-1111-111111111111",
         "username": "alice",
         "email": "alice@tenant-alpha.local",
+        "internal_role": None,
         "status": "active",
     },
     {
@@ -28,6 +32,7 @@ DEMO_USERS = (
         "keycloak_sub": "22222222-2222-2222-2222-222222222222",
         "username": "bob",
         "email": "bob@tenant-beta.local",
+        "internal_role": None,
         "status": "active",
     },
     {
@@ -35,6 +40,15 @@ DEMO_USERS = (
         "keycloak_sub": "33333333-3333-3333-3333-333333333333",
         "username": "carol",
         "email": "carol@saasguard.local",
+        "internal_role": None,
+        "status": "active",
+    },
+    {
+        "id": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "keycloak_sub": "44444444-4444-4444-4444-444444444444",
+        "username": "soc",
+        "email": "soc@saasguard.local",
+        "internal_role": "soc_admin",
         "status": "active",
     },
 )
@@ -113,6 +127,15 @@ DEMO_TENANT_RECORDS = (
         "monthly_spend": "640.00",
         "created_at": "2026-04-06T08:10:00+00:00",
     },
+)
+
+EXPORT_FIELDNAMES = (
+    "id",
+    "tenant_id",
+    "account_name",
+    "plan_name",
+    "monthly_spend",
+    "created_at",
 )
 
 
@@ -252,6 +275,28 @@ def _job_seed_rows(now: datetime) -> tuple[dict[str, object], ...]:
     )
 
 
+def _build_seed_export_csv(tenant_id: str) -> bytes:
+    rows = [
+        {
+            "id": index,
+            "tenant_id": record["tenant_id"],
+            "account_name": record["account_name"],
+            "plan_name": record["plan_name"],
+            "monthly_spend": record["monthly_spend"],
+            "created_at": record["created_at"].replace("T", " "),
+        }
+        for index, record in enumerate(
+            (item for item in DEMO_TENANT_RECORDS if item["tenant_id"] == tenant_id),
+            start=1,
+        )
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=EXPORT_FIELDNAMES)
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8")
+
+
 def _audit_seed_rows(now: datetime) -> tuple[dict[str, object], ...]:
     return (
         {
@@ -342,12 +387,13 @@ def seed_dev_data() -> None:
         for user in DEMO_USERS:
             cur.execute(
                 """
-                INSERT INTO users (id, keycloak_sub, username, email, status)
-                VALUES (%s, %s, %s, %s, %s)
+                INSERT INTO users (id, keycloak_sub, username, email, internal_role, status)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (id) DO UPDATE
                 SET keycloak_sub = EXCLUDED.keycloak_sub,
                     username = EXCLUDED.username,
                     email = EXCLUDED.email,
+                    internal_role = EXCLUDED.internal_role,
                     status = EXCLUDED.status,
                     updated_at = NOW()
                 """,
@@ -356,6 +402,7 @@ def seed_dev_data() -> None:
                     user["keycloak_sub"],
                     user["username"],
                     user["email"],
+                    user["internal_role"],
                     user["status"],
                 ),
             )
@@ -502,6 +549,13 @@ def seed_dev_data() -> None:
             )
 
         conn.commit()
+
+    for job in jobs:
+        if job["status"] == "completed" and job["object_key"]:
+            upload_csv(
+                str(job["object_key"]),
+                _build_seed_export_csv(str(job["tenant_id"])),
+            )
 
     logger.info(
         "seed completed",

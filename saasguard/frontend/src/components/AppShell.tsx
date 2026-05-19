@@ -1,5 +1,6 @@
 import { NavLink, Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { isOperationsNavVisible } from "../lib/authorization";
 import { LoadingState } from "./LoadingState";
 import { useTenant } from "../tenant/TenantProvider";
 import { ErrorPanel } from "./ErrorPanel";
@@ -10,11 +11,15 @@ const navigation = [
   { to: "/jobs", label: "Jobs" },
   { to: "/audit", label: "Audit" },
   { to: "/operations", label: "Operations" },
-];
+] as const;
 
 export function AppShell() {
   const auth = useAuth();
   const tenant = useTenant();
+  const operationsVisible = isOperationsNavVisible(tenant.session);
+  const visibleNavigation = navigation.filter(
+    (item) => item.to !== "/operations" || operationsVisible,
+  );
 
   if (auth.initializing) {
     return <LoadingState label="Redirecting to Keycloak" />;
@@ -36,7 +41,7 @@ export function AppShell() {
         </div>
 
         <nav className="nav-list">
-          {navigation.map((item) => (
+          {visibleNavigation.map((item) => (
             <NavLink
               className={({ isActive }) =>
                 isActive ? "nav-link nav-link-active" : "nav-link"
@@ -57,6 +62,9 @@ export function AppShell() {
             <div className="identity-block">
               <strong>{tenant.session?.user.username ?? "Unknown user"}</strong>
               <span>{tenant.session?.user.email ?? "No email"}</span>
+              {tenant.session?.user.internal_role ? (
+                <small>Internal role: {tenant.session.user.internal_role}</small>
+              ) : null}
             </div>
           </div>
 
@@ -64,6 +72,11 @@ export function AppShell() {
             <span className="eyebrow">Active tenant</span>
             {tenant.loading ? (
               <span>Loading context...</span>
+            ) : (tenant.session?.memberships.length ?? 0) === 0 ? (
+              <div className="tenant-pill">
+                No tenant scope
+                <small>Internal-only session</small>
+              </div>
             ) : tenant.session?.memberships.length === 1 ? (
               <div className="tenant-pill">
                 {tenant.session.active_tenant?.tenant_name}

@@ -34,6 +34,16 @@ api_job_read_denials_total = Counter(
     "saasguard_api_job_read_denials_total",
     "Denied job read attempts",
 )
+api_export_downloads_total = Counter(
+    "saasguard_api_export_downloads_total",
+    "Completed export downloads served by the API",
+    tenant_labels,
+)
+api_export_download_denials_total = Counter(
+    "saasguard_api_export_download_denials_total",
+    "Denied export download attempts",
+    tenant_labels,
+)
 
 worker_jobs_started_total = Counter(
     "saasguard_worker_jobs_started_total",
@@ -48,12 +58,12 @@ worker_jobs_completed_total = Counter(
 worker_jobs_failed_total = Counter(
     "saasguard_worker_jobs_failed_total",
     "Worker jobs failed",
-    tenant_labels + ["stage"],
+    tenant_labels + ["failure_stage"],
 )
 worker_job_retries_total = Counter(
     "saasguard_worker_job_retries_total",
     "Worker job retries",
-    tenant_labels + ["stage"],
+    tenant_labels + ["failure_stage"],
 )
 worker_job_duration_seconds = Histogram(
     "saasguard_worker_job_duration_seconds",
@@ -68,11 +78,12 @@ worker_queue_wait_seconds = Histogram(
 worker_db_query_failures_total = Counter(
     "saasguard_worker_db_query_failures_total",
     "Worker database query failures",
-    ["operation"],
+    ["failure_stage"],
 )
 worker_minio_upload_failures_total = Counter(
     "saasguard_worker_minio_upload_failures_total",
     "Worker MinIO upload failures",
+    tenant_labels + ["failure_stage"],
 )
 worker_export_row_count = Histogram(
     "saasguard_worker_export_row_count",
@@ -87,6 +98,26 @@ queue_backlog_jobs = Gauge(
 oldest_pending_job_age_seconds = Gauge(
     "saasguard_oldest_pending_job_age_seconds",
     "Age of the oldest queued job in seconds",
+)
+export_jobs_by_status = Gauge(
+    "saasguard_export_jobs",
+    "Current export job counts by tenant and status from PostgreSQL",
+    tenant_labels + ["status"],
+)
+export_jobs_by_failure_stage = Gauge(
+    "saasguard_export_jobs_by_failure_stage",
+    "Current export job counts by tenant, status, and failure stage from PostgreSQL",
+    tenant_labels + ["status", "failure_stage"],
+)
+export_job_duration_avg_seconds = Gauge(
+    "saasguard_export_job_duration_avg_seconds",
+    "Average successful export duration in seconds by tenant over the recent window",
+    tenant_labels + ["status"],
+)
+stale_processing_jobs = Gauge(
+    "saasguard_stale_processing_jobs",
+    "Current count of stale processing export jobs by tenant",
+    tenant_labels,
 )
 
 

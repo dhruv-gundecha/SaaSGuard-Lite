@@ -14,6 +14,7 @@ def _job_record(
     requester_user_id: str,
     requester_role: str = "analyst",
     status: str = "queued",
+    object_key: str | None = None,
 ):
     now = datetime.now(UTC)
     return {
@@ -22,7 +23,7 @@ def _job_record(
         "requester_user_id": requester_user_id,
         "requester_role": requester_role,
         "status": status,
-        "object_key": None,
+        "object_key": object_key,
         "error_message": None,
         "failure_stage": None,
         "correlation_id": uuid4(),
@@ -30,7 +31,7 @@ def _job_record(
         "created_at": now,
         "updated_at": now,
         "started_at": now if status == "processing" else None,
-        "completed_at": None,
+        "completed_at": now if status == "completed" else None,
     }
 
 
@@ -151,3 +152,123 @@ def test_worker_reloads_authoritative_job_context_from_database(monkeypatch):
     assert uploaded["object_key"] == f"exports/tenant_alpha/{queued_job_id}.csv"
     assert "tenant_beta" not in uploaded["payload"]
     assert completed == [(queued_job_id, f"exports/tenant_alpha/{queued_job_id}.csv")]
+
+
+def test_completed_job_can_be_downloaded_by_same_tenant_authorized_user(
+    client, alice_user, monkeypatch
+):
+    job_id = uuid4()
+    job = _job_record(
+        job_id=job_id,
+        tenant_id="tenant_alpha",
+        requester_user_id=alice_user.user_id,
+        status="completed",
+        object_key=f"exports/tenant_alpha/{job_id}.csv",
+    )
+    audit_events = []
+
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
+    monkeypatch.setattr("src.api.download_csv", lambda object_key: b"id,tenant_id\n1,tenant_alpha\n")
+    monkeypatch.setattr("src.api.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
+
+    response = client.get(f"/jobs/{job_id}/download")
+
+    assert response.status_code == 200
+    assert response.text == "id,tenant_id\n1,tenant_alpha\n"
+    assert response.headers["content-type"].startswith("text/csv")
+    assert response.headers["content-disposition"] == f'attachment; filename="{job_id}.csv"'
+    assert audit_events
+    assert audit_events[0]["action"] == "export.downloaded"
+    assert audit_events[0]["tenant_id"] == "tenant_alpha"
+    assert audit_events[0]["actor_user_id"] == alice_user.user_id
+    assert audit_events[0]["target_id"] == str(job_id)
+    assert audit_events[0]["outcome"] == "success"
+
+
+def test_cross_tenant_download_is_denied(client, bob_user, monkeypatch):
+    job_id = uuid4()
+    job = _job_record(
+        job_id=job_id,
+        tenant_id="tenant_alpha",
+        requester_user_id="user-alice",
+        status="completed",
+        object_key=f"exports/tenant_alpha/{job_id}.csv",
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: bob_user
+    monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
+
+    response = client.get(f"/jobs/{job_id}/download")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Access to this export is denied"}
+
+
+def test_queued_job_cannot_be_downloaded(client, alice_user, monkeypatch):
+    job_id = uuid4()
+    job = _job_record(
+        job_id=job_id,
+        tenant_id="tenant_alpha",
+        requester_user_id=alice_user.user_id,
+        status="queued",
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
+
+    response = client.get(f"/jobs/{job_id}/download")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Export is not ready for download"}
+
+
+def test_failed_job_cannot_be_downloaded(client, alice_user, monkeypatch):
+    job_id = uuid4()
+    job = _job_record(
+        job_id=job_id,
+        tenant_id="tenant_alpha",
+        requester_user_id=alice_user.user_id,
+        status="failed",
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
+
+    response = client.get(f"/jobs/{job_id}/download")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Export is not ready for download"}
+
+
+def test_completed_job_without_object_key_cannot_be_downloaded(
+    client, alice_user, monkeypatch
+):
+    job_id = uuid4()
+    job = _job_record(
+        job_id=job_id,
+        tenant_id="tenant_alpha",
+        requester_user_id=alice_user.user_id,
+        status="completed",
+        object_key=None,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
+
+    response = client.get(f"/jobs/{job_id}/download")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Completed export is unavailable for download"}
+
+
+def test_missing_job_download_returns_404(client, alice_user, monkeypatch):
+    missing_job_id = uuid4()
+
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.api.get_job", lambda requested_job_id: None)
+
+    response = client.get(f"/jobs/{missing_job_id}/download")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Job not found"}
