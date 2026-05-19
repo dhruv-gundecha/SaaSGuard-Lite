@@ -10,6 +10,7 @@ from src.logging_utils import log_event
 
 logger = logging.getLogger("saasguard.authz")
 ROLE_ORDER = {"viewer": 1, "analyst": 2, "tenant_admin": 3}
+OPERATIONS_INTERNAL_ROLES = {"soc_admin", "ops_admin"}
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,46 @@ def require_role(
         tenant_id=tenant.tenant_id,
         user_id=user.user_id,
         keycloak_sub=user.keycloak_sub,
+        outcome="denied",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="User does not have sufficient permissions",
+    )
+
+
+def can_access_operations(user: AuthenticatedUser) -> bool:
+    return user.internal_role in OPERATIONS_INTERNAL_ROLES
+
+
+def require_operations_role(
+    *,
+    user: AuthenticatedUser,
+    correlation_id: str,
+    action: str,
+) -> None:
+    if can_access_operations(user):
+        return
+
+    record_audit_event(
+        actor_user_id=user.user_id,
+        actor_sub=user.keycloak_sub,
+        tenant_id=None,
+        action=action,
+        target_type="operations_overview",
+        target_id="global",
+        outcome="denied",
+        reason=f"internal role {user.internal_role or 'none'} cannot access global operations",
+        correlation_id=correlation_id,
+    )
+    log_event(
+        logger,
+        logging.WARNING,
+        "auth.operations_denied",
+        "global operations access denied",
+        user_id=user.user_id,
+        keycloak_sub=user.keycloak_sub,
+        correlation_id=correlation_id,
         outcome="denied",
     )
     raise HTTPException(

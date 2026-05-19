@@ -26,7 +26,7 @@
 ### Full export download through frontend
 
 - **Why it matters:** the core promise is not just job creation but a successful tenant-scoped CSV download from the UI.
-- **Why not automated yet:** current tests stop at API and worker boundaries and do not validate browser download handling or presigned URL behavior from the frontend.
+- **Why not automated yet:** current tests stop at API and worker boundaries and do not validate browser download handling from the frontend.
 - **How to test manually:** sign in as `alice`, request an export, wait for completion in the jobs page, click download, and verify the CSV contents belong only to `tenant_alpha`.
 - **Desired future automation:** Playwright download test with fixture CSV validation and tenant-content assertions.
 

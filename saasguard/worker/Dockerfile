@@ -11,4 +11,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src ./src
 COPY sql ./sql
 
-CMD ["celery", "-A", "src.worker_app.celery_app", "worker", "--loglevel=INFO"]
+CMD ["celery", "-A", "src.worker_app.celery_app", "worker", "--loglevel=INFO", "--pool=solo"]

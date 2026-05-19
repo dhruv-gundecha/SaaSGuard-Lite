@@ -10,14 +10,14 @@ The emphasis here is customer disruption, not abstract infrastructure risk. A pr
 
 **Description**
 
-If the FastAPI API or the React frontend is unavailable, the product becomes partially or fully unusable. The frontend is the main operator surface, and the API is the control plane behind login context, job creation, job listing, audit access, and download link generation.
+If the FastAPI API or the React frontend is unavailable, the product becomes partially or fully unusable. The frontend is the main operator surface, and the API is the control plane behind login context, job creation, job listing, audit access, and secure completed-export downloads.
 
 **Customer impact**
 
 - Users cannot log in through the frontend.
 - Users cannot request exports with `POST /exports`.
 - Users cannot view queued, processing, failed, or completed jobs.
-- Users cannot retrieve fresh download links for completed exports.
+- Users cannot retrieve completed exports through the authorized API download path.
 
 **Likely causes**
 

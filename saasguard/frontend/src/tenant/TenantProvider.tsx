@@ -52,9 +52,14 @@ export function TenantProvider({ children }: PropsWithChildren) {
         nextSession.memberships[0]?.tenant_id ??
         null;
 
-      if (resolvedTenantId && resolvedTenantId !== activeTenantId) {
-        sessionStorage.setItem(ACTIVE_TENANT_KEY, resolvedTenantId);
-        setActiveTenantIdState(resolvedTenantId);
+      if (resolvedTenantId) {
+        if (resolvedTenantId !== activeTenantId) {
+          sessionStorage.setItem(ACTIVE_TENANT_KEY, resolvedTenantId);
+          setActiveTenantIdState(resolvedTenantId);
+        }
+      } else if (activeTenantId) {
+        sessionStorage.removeItem(ACTIVE_TENANT_KEY);
+        setActiveTenantIdState(null);
       }
 
       setSession(nextSession);

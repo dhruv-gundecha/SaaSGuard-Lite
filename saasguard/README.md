@@ -14,7 +14,7 @@ SaaSGuard-Lite is a developer-realistic secure-by-design multi-tenant export ser
 ## Security model
 
 - Keycloak authenticates identity with bearer JWTs.
-- The application authorizes tenant membership and role access.
+- The application authorizes tenant membership roles and internal operations roles.
 - Redis carries only `job_id`.
 - The worker reloads trusted job and tenant context from PostgreSQL before doing work.
 - The worker never trusts queue payloads for tenant identity or user identity.
@@ -26,6 +26,7 @@ SaaSGuard-Lite is a developer-realistic secure-by-design multi-tenant export ser
 - `viewer`: read jobs and download completed exports
 - `analyst`: viewer permissions plus create export jobs
 - `tenant_admin`: analyst permissions plus tenant audit access
+- `soc_admin` / `ops_admin`: internal-only global Operations Overview access for observability and investigation tooling
 
 ## Development users
 
@@ -34,6 +35,7 @@ Keycloak realm import and the local demo seed bootstrap align these users:
 - `alice` / `alice-password` -> `tenant_alpha` -> `analyst`
 - `bob` / `bob-password` -> `tenant_beta` -> `analyst`
 - `carol` / `carol-password` -> `tenant_alpha`, `tenant_beta` -> `tenant_admin`
+- `soc` / `soc-password` -> internal `soc_admin` access with no tenant-scoped membership required for the global Operations page
 
 The backend keeps production-style `sub` matching by default. In local mode only, `DEV_AUTH_USERNAME_FALLBACK_ENABLED=true` allows the app to repair a seeded internal user mapping from `preferred_username` if the imported Keycloak user UUIDs drift.
 
@@ -109,10 +111,13 @@ Operational risk deliverables added in this repo include:
 
 The product now also includes an Operations Overview command center on the frontend `Operations` page. It reads `GET /operations/summary`, summarizes API health, export pipeline state, worker reliability, security signals, dependency health, and release-regression hints, and then deep-links operators into Grafana, Loki, Prometheus, Uptime Kuma, and MinIO for detailed investigation.
 
+That page is intentionally restricted to internal `soc_admin` or `ops_admin` users. Grafana, Loki, Prometheus, and Uptime Kuma are global observability systems and can expose cross-tenant logs, metrics, and investigation context. Tenant users, including `tenant_admin`, instead receive tenant-scoped dashboard, job, export, and audit views through application-managed authorization.
+
 The current automated tests validate:
 
 - functional export creation through `POST /exports`
 - cross-tenant authorization denial for `GET /jobs/{job_id}`
+- secure completed-export download through `GET /jobs/{job_id}/download`
 - worker reconstruction of authoritative job context from the database before export processing
 
 ## Local endpoints
@@ -176,6 +181,8 @@ curl http://localhost:8000/jobs/<job_id>/download \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
+Completed export downloads are served by the FastAPI API, not by direct browser access to MinIO. The backend re-checks authentication, tenant membership, role authorization, completed-job status, and object availability before streaming the CSV back as an attachment. Download events are also written to `audit_events`.
+
 For multi-tenant users like `carol`, set the active tenant explicitly:
 
 ```bash
@@ -194,6 +201,7 @@ The local demo seed creates:
   - `bob` -> `tenant_beta` -> `analyst`
   - `carol` -> `tenant_alpha` -> `tenant_admin`
   - `carol` -> `tenant_beta` -> `tenant_admin`
+  - `soc` -> internal `soc_admin`
 - tenant records for both tenants so exported CSVs and the dashboard have realistic content
 - job history with stable IDs so reseeding does not create duplicates
 
@@ -212,20 +220,21 @@ Completed jobs use realistic object keys such as:
 
 1. Open `http://localhost:3001`.
 2. Click `Sign in with Keycloak`.
-3. Log in as `alice`, `bob`, or `carol`.
+3. Log in as `alice`, `bob`, `carol`, or `soc`.
 4. If the user has multiple memberships, choose an active tenant in the top bar.
 5. Use:
-   - `Dashboard` for identity and tenant context
+   - `Dashboard` for identity and tenant-scoped summary cards
    - `Exports` to request a new export
    - `Jobs` to inspect tenant-scoped jobs and failures
    - `Audit` to review audit evidence when the role allows it
-   - `Operations` to jump into Grafana, Prometheus, and Loki-oriented workflows
+   - `Operations` only for internal `soc_admin` or `ops_admin` users who need global observability workflows
 
 Frontend notes:
 
 - The browser UI uses Keycloak PKCE and keeps tokens in the adapter memory rather than storing them in local storage.
 - The frontend sends `X-Active-Tenant` only for authorized memberships selected in the UI.
 - The backend remains the source of truth for authorization decisions.
+- Normal users do not need direct MinIO access. MinIO remains internal object storage behind the API download endpoint.
 
 ## Observability
 

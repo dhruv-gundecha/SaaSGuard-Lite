@@ -1,6 +1,5 @@
 import { useAuthedQuery } from "../hooks/useAuthedQuery";
-import { formatDurationSeconds, formatMillis, formatPercent } from "../lib/format";
-import { OperationsSummaryResponse } from "../lib/types";
+import { DashboardSummaryResponse } from "../lib/types";
 import { EmptyState } from "../components/EmptyState";
 import { ErrorPanel } from "../components/ErrorPanel";
 import { LoadingState } from "../components/LoadingState";
@@ -9,8 +8,9 @@ import { useTenant } from "../tenant/TenantProvider";
 
 export function HomePage() {
   const tenant = useTenant();
-  const summary = useAuthedQuery<OperationsSummaryResponse>(
-    tenant.activeTenantId ? "/operations/summary" : null,
+  const hasTenantScope = Boolean(tenant.activeMembership?.tenant_id);
+  const summary = useAuthedQuery<DashboardSummaryResponse>(
+    hasTenantScope ? "/dashboard/summary" : null,
     { pollMs: 15000 },
   );
 
@@ -51,47 +51,52 @@ export function HomePage() {
           <ul className="plain-list">
             <li>Authentication comes from Keycloak OIDC.</li>
             <li>Tenant membership and roles come from the application.</li>
+            <li>Global operations access is reserved for internal SOC or operator users.</li>
             <li>Redis is transport only. The worker reloads job context from PostgreSQL.</li>
-            <li>All views in this console are scoped to the active tenant.</li>
+            <li>Tenant users receive tenant-scoped views instead of raw global observability links.</li>
           </ul>
         </div>
       </div>
 
-      {!tenant.activeTenantId ? (
+      {!hasTenantScope ? (
         <EmptyState
-          title="Tenant selection required"
-          description="Choose an authorized tenant in the top bar to load tenant-scoped data."
+          title={
+            tenant.session?.authorization.can_access_operations
+              ? "Internal operations session"
+              : "Tenant selection required"
+          }
+          description={
+            tenant.session?.authorization.can_access_operations
+              ? "This account can access the global Operations page. Tenant-scoped dashboard cards are only available when the session has an active tenant membership."
+              : "Choose an authorized tenant in the top bar to load tenant-scoped data."
+          }
         />
       ) : summary.loading ? (
-        <LoadingState label="Loading operations summary" />
+        <LoadingState label="Loading tenant summary" />
       ) : summary.error ? (
         <ErrorPanel message={summary.error} />
       ) : summary.data ? (
         <div className="grid metrics-grid">
-          <MetricCard label="Overall health" value={summary.data.overall_status} />
+          <MetricCard label="Tenant queued jobs" value={summary.data.summary.queued_jobs} />
           <MetricCard
-            label="API p95 latency"
-            tone={summary.data.api.status === "unhealthy" ? "danger" : summary.data.api.status === "degraded" ? "neutral" : "success"}
-            value={formatMillis(summary.data.api.p95_latency_ms)}
+            label="Tenant failed jobs"
+            tone={summary.data.summary.failed_jobs > 0 ? "danger" : "success"}
+            value={summary.data.summary.failed_jobs}
           />
           <MetricCard
-            label="Completed (1h)"
+            label="Completed (24h)"
             tone="success"
-            value={summary.data.exports.completed_last_hour}
+            value={summary.data.summary.completed_jobs_last_24h}
           />
           <MetricCard
-            label="API 5xx rate"
-            tone={summary.data.api.error_rate > 0.02 ? "danger" : "neutral"}
-            value={formatPercent(summary.data.api.error_rate)}
+            label="Upload failures (24h)"
+            tone={summary.data.summary.upload_failures_last_24h > 0 ? "danger" : "neutral"}
+            value={summary.data.summary.upload_failures_last_24h}
           />
           <MetricCard
-            label="Backlog"
-            tone={summary.data.exports.status === "unhealthy" ? "danger" : "neutral"}
-            value={summary.data.exports.queued + summary.data.exports.retry_pending}
-          />
-          <MetricCard
-            label="Oldest pending job"
-            value={formatDurationSeconds(summary.data.exports.oldest_pending_age_seconds)}
+            label="Auth denials (24h)"
+            tone={summary.data.summary.authorization_denials_last_24h > 0 ? "neutral" : "success"}
+            value={summary.data.summary.authorization_denials_last_24h}
           />
         </div>
       ) : null}

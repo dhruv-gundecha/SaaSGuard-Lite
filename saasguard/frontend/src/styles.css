@@ -302,6 +302,12 @@ select {
   cursor: not-allowed;
 }
 
+.ghost-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;

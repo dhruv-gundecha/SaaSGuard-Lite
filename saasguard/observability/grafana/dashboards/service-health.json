@@ -22,7 +22,7 @@
       "id": 1,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_requests_total[5m])) * 60",
+          "expr": "sum(rate(saasguard_api_requests_total{job=\"saasguard-api\"}[5m])) * 60",
           "legendFormat": "requests/min"
         }
       ],
@@ -43,7 +43,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_requests_total{status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(saasguard_api_requests_total[5m])), 1)",
+          "expr": "sum(rate(saasguard_api_requests_total{job=\"saasguard-api\",status_code=~\"5..\"}[5m])) / clamp_min(sum(rate(saasguard_api_requests_total{job=\"saasguard-api\"}[5m])), 1)",
           "legendFormat": "api error rate"
         }
       ],
@@ -64,7 +64,7 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_auth_failures_total[5m]))",
+          "expr": "sum(rate(saasguard_api_auth_failures_total{job=\"saasguard-api\"}[5m])) or vector(0)",
           "legendFormat": "auth failures"
         }
       ],
@@ -85,15 +85,15 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_worker_jobs_started_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_jobs_started_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "started"
         },
         {
-          "expr": "sum(rate(saasguard_worker_jobs_completed_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_jobs_completed_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "completed"
         },
         {
-          "expr": "sum(rate(saasguard_worker_jobs_failed_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_jobs_failed_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "failed"
         }
       ],
@@ -105,6 +105,36 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "oldest pending age"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
         "w": 8,
@@ -114,11 +144,15 @@
       "id": 5,
       "targets": [
         {
-          "expr": "saasguard_queue_backlog_jobs",
+          "expr": "sum(saasguard_export_jobs{job=\"saasguard-api\",status=\"queued\"}) or vector(0)",
           "legendFormat": "queued jobs"
         },
         {
-          "expr": "saasguard_oldest_pending_job_age_seconds",
+          "expr": "sum(saasguard_export_jobs{job=\"saasguard-api\",status=\"retry_pending\"}) or vector(0)",
+          "legendFormat": "retry pending"
+        },
+        {
+          "expr": "saasguard_oldest_pending_job_age_seconds{job=\"saasguard-api\"} or vector(0)",
           "legendFormat": "oldest pending age"
         }
       ],
@@ -139,11 +173,11 @@
       "id": 6,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_worker_minio_upload_failures_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_minio_upload_failures_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "MinIO upload failures"
         },
         {
-          "expr": "sum(rate(saasguard_worker_db_query_failures_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_db_query_failures_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "DB query failures"
         }
       ],
@@ -164,7 +198,7 @@
       "id": 7,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_export_requests_created_total[5m]))",
+          "expr": "sum(increase(saasguard_api_export_requests_created_total{job=\"saasguard-api\"}[5m])) or vector(0)",
           "legendFormat": "exports requested"
         }
       ],
@@ -185,11 +219,11 @@
       "id": 8,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_worker_jobs_failed_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_jobs_failed_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "failed"
         },
         {
-          "expr": "sum(rate(saasguard_worker_job_retries_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_job_retries_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "retries"
         }
       ],
@@ -210,15 +244,36 @@
       "id": 9,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(saasguard_api_request_latency_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(saasguard_api_request_latency_seconds_bucket{job=\"saasguard-api\"}[5m]))) or vector(0)",
           "legendFormat": "api p95"
         },
         {
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(saasguard_worker_queue_wait_seconds_bucket[15m])))",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(saasguard_worker_queue_wait_seconds_bucket{job=\"saasguard-worker\"}[15m]))) or vector(0)",
           "legendFormat": "queue wait p95"
         }
       ],
       "title": "Latency and Queue Wait P95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "up{job=~\"saasguard-api|saasguard-worker\"}",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "title": "Metrics Scrape Health",
       "type": "timeseries"
     }
   ],
@@ -235,5 +290,5 @@
   },
   "title": "Service Health",
   "uid": "saasguard-service-health",
-  "version": 2
+  "version": 3
 }

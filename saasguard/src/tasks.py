@@ -70,7 +70,7 @@ def export_job(self, job_id: str) -> None:
     parsed_job_id = UUID(job_id)
     job = get_job(parsed_job_id)
     if not job:
-        worker_db_query_failures_total.labels(operation="get_job_missing").inc()
+        worker_db_query_failures_total.labels(failure_stage="get_job").inc()
         log_event(
             logger,
             logging.ERROR,
@@ -148,7 +148,7 @@ def export_job(self, job_id: str) -> None:
         try:
             rows = fetch_tenant_records(claimed_job["tenant_id"])
         except Exception as exc:
-            worker_db_query_failures_total.labels(operation="fetch_tenant_records").inc()
+            worker_db_query_failures_total.labels(failure_stage="records_load").inc()
             raise TransientJobFailure("records_load", "failed to load tenant export rows") from exc
 
         worker_export_row_count.labels(**metric_labels).observe(len(rows))
@@ -188,7 +188,9 @@ def export_job(self, job_id: str) -> None:
             )
             upload_csv(object_key, output.getvalue().encode("utf-8"))
         except (BotoCoreError, ClientError) as exc:
-            worker_minio_upload_failures_total.inc()
+            worker_minio_upload_failures_total.labels(
+                failure_stage="upload", **metric_labels
+            ).inc()
             log_event(
                 logger,
                 logging.ERROR,
@@ -233,7 +235,9 @@ def export_job(self, job_id: str) -> None:
         )
         metric_labels = tenant_metric_labels(job["tenant_id"])
         if retry_state and retry_state["retry_count"] <= settings.worker_retry_limit:
-            worker_job_retries_total.labels(stage=exc.stage, **metric_labels).inc()
+            worker_job_retries_total.labels(
+                failure_stage=exc.stage, **metric_labels
+            ).inc()
             log_event(
                 logger,
                 logging.WARNING,
@@ -246,7 +250,9 @@ def export_job(self, job_id: str) -> None:
             )
             raise self.retry(countdown=settings.worker_retry_delay_seconds, exc=exc)
         mark_job_failed(parsed_job_id, error_message=str(exc), failure_stage=exc.stage)
-        worker_jobs_failed_total.labels(stage=exc.stage, **metric_labels).inc()
+        worker_jobs_failed_total.labels(
+            failure_stage=exc.stage, **metric_labels
+        ).inc()
         record_audit_event(
             actor_user_id=str(job["requester_user_id"]),
             actor_sub=None,
@@ -270,7 +276,9 @@ def export_job(self, job_id: str) -> None:
         )
     except PermanentJobFailure as exc:
         metric_labels = tenant_metric_labels(job["tenant_id"])
-        worker_jobs_failed_total.labels(stage=exc.stage, **metric_labels).inc()
+        worker_jobs_failed_total.labels(
+            failure_stage=exc.stage, **metric_labels
+        ).inc()
         mark_job_failed(parsed_job_id, error_message=str(exc), failure_stage=exc.stage)
         record_audit_event(
             actor_user_id=str(job["requester_user_id"]),
@@ -297,7 +305,9 @@ def export_job(self, job_id: str) -> None:
         raise
     except Exception as exc:
         metric_labels = tenant_metric_labels(job["tenant_id"])
-        worker_jobs_failed_total.labels(stage="unexpected", **metric_labels).inc()
+        worker_jobs_failed_total.labels(
+            failure_stage="unexpected", **metric_labels
+        ).inc()
         mark_job_failed(
             parsed_job_id,
             error_message="unexpected worker failure",

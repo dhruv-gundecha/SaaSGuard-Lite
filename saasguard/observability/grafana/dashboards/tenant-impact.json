@@ -18,11 +18,11 @@
       "id": 1,
       "targets": [
         {
-          "expr": "sum by (tenant_id) (increase(saasguard_worker_jobs_failed_total[6h]))",
+          "expr": "sum by (tenant_id) (saasguard_export_jobs{job=\"saasguard-api\",status=\"failed\"})",
           "legendFormat": "{{tenant_id}}"
         }
       ],
-      "title": "Failed Jobs By Tenant",
+      "title": "Failed Exports By Tenant",
       "type": "barchart"
     },
     {
@@ -39,7 +39,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "sum by (tenant_id) (increase(saasguard_worker_jobs_completed_total[6h]))",
+          "expr": "sum by (tenant_id) (saasguard_export_jobs{job=\"saasguard-api\",status=\"completed\"})",
           "legendFormat": "{{tenant_id}}"
         }
       ],
@@ -60,11 +60,11 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum by (tenant_id) (saasguard_api_export_requests_created_total)",
+          "expr": "sum by (tenant_id) (increase(saasguard_api_export_requests_created_total{job=\"saasguard-api\"}[24h]))",
           "legendFormat": "{{tenant_id}}"
         }
       ],
-      "title": "Export Requests By Tenant",
+      "title": "Export Requests By Tenant (24h)",
       "type": "barchart"
     },
     {
@@ -81,12 +81,12 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum by (tenant_id) (rate(saasguard_worker_job_duration_seconds_sum[15m])) / clamp_min(sum by (tenant_id) (rate(saasguard_worker_job_duration_seconds_count[15m])), 1)",
+          "expr": "saasguard_export_job_duration_avg_seconds{job=\"saasguard-api\",status=\"completed\"}",
           "legendFormat": "{{tenant_id}}"
         }
       ],
-      "title": "Average Export Latency By Tenant",
-      "type": "timeseries"
+      "title": "Successful Export Latency By Tenant",
+      "type": "barchart"
     },
     {
       "datasource": {
@@ -102,7 +102,7 @@
       "id": 5,
       "targets": [
         {
-          "expr": "count(count by (tenant_id) (saasguard_worker_jobs_failed_total) > 0)",
+          "expr": "count(max by (tenant_id) ((saasguard_export_jobs{job=\"saasguard-api\",status=~\"failed|retry_pending|queued\"} > 0) or on (tenant_id) (saasguard_stale_processing_jobs{job=\"saasguard-api\"} > 0))) or vector(0)",
           "legendFormat": "affected tenants"
         }
       ],
@@ -123,7 +123,7 @@
       "id": 6,
       "targets": [
         {
-          "expr": "topk(10, sum by (tenant_id) (increase(saasguard_api_export_requests_created_total[6h])))",
+          "expr": "topk(10, sum by (tenant_id) (increase(saasguard_api_export_requests_created_total{job=\"saasguard-api\"}[24h])))",
           "legendFormat": "{{tenant_id}}"
         }
       ],
@@ -135,21 +135,62 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "oldest pending age (s)"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 16
       },
       "id": 7,
       "targets": [
         {
-          "expr": "saasguard_queue_backlog_jobs",
+          "expr": "sum(saasguard_export_jobs{job=\"saasguard-api\",status=\"queued\"}) or vector(0)",
           "legendFormat": "queued jobs"
         },
         {
-          "expr": "saasguard_oldest_pending_job_age_seconds",
-          "legendFormat": "oldest pending age"
+          "expr": "sum(saasguard_export_jobs{job=\"saasguard-api\",status=\"retry_pending\"}) or vector(0)",
+          "legendFormat": "retry pending jobs"
+        },
+        {
+          "expr": "sum(saasguard_export_jobs{job=\"saasguard-api\",status=\"processing\"}) or vector(0)",
+          "legendFormat": "processing jobs"
+        },
+        {
+          "expr": "saasguard_oldest_pending_job_age_seconds{job=\"saasguard-api\"} or vector(0)",
+          "legendFormat": "oldest pending age (s)"
         }
       ],
       "title": "Global Queue Pressure",
@@ -162,19 +203,19 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 12,
         "y": 16
       },
       "id": 8,
       "targets": [
         {
-          "expr": "sum by (stage) (rate(saasguard_worker_job_retries_total[5m]))",
-          "legendFormat": "retry {{stage}}"
+          "expr": "sum by (failure_stage) (increase(saasguard_worker_job_retries_total{job=\"saasguard-worker\"}[5m]))",
+          "legendFormat": "retry {{failure_stage}}"
         },
         {
-          "expr": "sum by (stage) (rate(saasguard_worker_jobs_failed_total[5m]))",
-          "legendFormat": "failed {{stage}}"
+          "expr": "sum by (failure_stage) (increase(saasguard_worker_jobs_failed_total{job=\"saasguard-worker\"}[5m]))",
+          "legendFormat": "failed {{failure_stage}}"
         }
       ],
       "title": "Worker Retry and Failure Stages",
@@ -187,22 +228,43 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 16
+        "w": 12,
+        "x": 0,
+        "y": 24
       },
       "id": 9,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_worker_minio_upload_failures_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_minio_upload_failures_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "MinIO upload failures"
         },
         {
-          "expr": "sum(rate(saasguard_worker_db_query_failures_total[5m]))",
+          "expr": "sum(increase(saasguard_worker_db_query_failures_total{job=\"saasguard-worker\"}[5m])) or vector(0)",
           "legendFormat": "DB query failures"
         }
       ],
       "title": "Worker Dependency Failures",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 10,
+      "targets": [
+        {
+          "expr": "up{job=~\"saasguard-api|saasguard-worker\"}",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "title": "Metrics Scrape Health",
       "type": "timeseries"
     }
   ],
@@ -219,5 +281,5 @@
   },
   "title": "Tenant Impact",
   "uid": "saasguard-tenant-impact",
-  "version": 2
+  "version": 3
 }

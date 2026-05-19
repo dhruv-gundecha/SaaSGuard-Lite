@@ -9,7 +9,7 @@ SaaSGuard-Lite keeps a simple multi-service shape:
 - Worker service handles asynchronous export execution and worker metrics.
 - PostgreSQL is the source of truth for users, tenants, memberships, jobs, and audit evidence.
 - Redis is the queue transport only.
-- MinIO stores completed CSV exports.
+- MinIO stores completed CSV exports. Browser downloads still flow through the API so tenant authorization is enforced at read time.
 - Keycloak issues OIDC bearer tokens for local development.
 - Prometheus scrapes metrics.
 - Loki stores logs shipped by Promtail.
@@ -22,6 +22,7 @@ SaaSGuard-Lite keeps a simple multi-service shape:
 - The FastAPI application validates issuer, audience, signature, and expiration against Keycloak JWKS.
 - The application maps token `sub` to internal `users.keycloak_sub`.
 - Tenant authorization is resolved from `memberships`, not from token roles.
+- Internal global operations access is resolved from the application `users.internal_role`, not from frontend-only checks.
 - Multi-tenant users select an active tenant with `X-Active-Tenant`.
 
 ## Authoritative data path
@@ -49,6 +50,7 @@ The worker flow is:
 5. Run tenant-scoped queries using `tenant_id`.
 6. Upload the result to MinIO.
 7. Persist completion or failure state and write correlated logs and audit records.
+8. Serve completed downloads back through `GET /jobs/{job_id}/download` after the API revalidates tenant membership and role access.
 
 This prevents queue tampering from becoming an authorization source.
 

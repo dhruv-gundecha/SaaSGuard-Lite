@@ -27,6 +27,7 @@ class AuthenticatedUser:
     keycloak_sub: str
     username: str
     email: str | None
+    internal_role: str | None
     memberships: tuple[dict, ...]
 
 
@@ -115,7 +116,7 @@ def get_current_user(authorization: str | None = Header(default=None)) -> Authen
         )
 
     memberships = tuple(get_active_memberships_for_user(str(user["id"])))
-    if not memberships:
+    if not memberships and not user.get("internal_role"):
         log_event(
             logger,
             logging.WARNING,
@@ -145,5 +146,6 @@ def get_current_user(authorization: str | None = Header(default=None)) -> Authen
         keycloak_sub=identity.sub,
         username=user["username"],
         email=user["email"],
+        internal_role=user.get("internal_role"),
         memberships=memberships,
     )

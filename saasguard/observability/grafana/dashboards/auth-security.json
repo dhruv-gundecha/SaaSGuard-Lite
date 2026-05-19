@@ -18,7 +18,7 @@
       "id": 1,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_auth_failures_total[5m]))",
+          "expr": "sum(rate(saasguard_api_auth_failures_total{job=\"saasguard-api\"}[5m]))",
           "legendFormat": "token validation failures"
         }
       ],
@@ -39,7 +39,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "sum by (action) (rate(saasguard_api_authorization_denials_total[5m]))",
+          "expr": "sum by (action) (rate(saasguard_api_authorization_denials_total{job=\"saasguard-api\"}[5m])) or label_replace(vector(0), \"action\", \"none\", \"\", \"\")",
           "legendFormat": "{{action}}"
         }
       ],
@@ -60,7 +60,7 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_job_read_denials_total[5m]))",
+          "expr": "sum(rate(saasguard_api_job_read_denials_total{job=\"saasguard-api\"}[5m]))",
           "legendFormat": "cross-tenant denials"
         }
       ],
@@ -81,7 +81,7 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum by (role) (increase(saasguard_api_export_requests_created_total[6h]))",
+          "expr": "sum by (role) (increase(saasguard_api_export_requests_created_total{job=\"saasguard-api\"}[6h]))",
           "legendFormat": "{{role}}"
         }
       ],
@@ -102,11 +102,11 @@
       "id": 5,
       "targets": [
         {
-          "expr": "topk(10, sum by (keycloak_sub) (count_over_time({compose_service=\"api\"} | json | outcome=\"denied\" [1h])))",
-          "legendFormat": "{{keycloak_sub}}"
+          "expr": "topk(10, sum by (event_name) (count_over_time({compose_service=\"api\"} | json | outcome=\"denied\" [1h])))",
+          "legendFormat": "{{event_name}}"
         }
       ],
-      "title": "Repeated Failures By Subject",
+      "title": "Denied Event Volume (1h)",
       "type": "barchart"
     },
     {
@@ -144,11 +144,11 @@
       "id": 7,
       "targets": [
         {
-          "expr": "sum(rate(saasguard_api_requests_total{path=\"/exports\",method=\"POST\"}[5m]))",
+          "expr": "sum(rate(saasguard_api_requests_total{job=\"saasguard-api\",path=\"/exports\",method=\"POST\"}[5m]))",
           "legendFormat": "POST /exports"
         },
         {
-          "expr": "sum(rate(saasguard_api_export_requests_created_total[5m]))",
+          "expr": "sum(rate(saasguard_api_export_requests_created_total{job=\"saasguard-api\"}[5m]))",
           "legendFormat": "jobs created"
         }
       ],
@@ -209,5 +209,5 @@
   },
   "title": "Auth and Security",
   "uid": "saasguard-auth-security",
-  "version": 2
+  "version": 3
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiRequest, ApiError } from "../lib/api";
 import { useAuth } from "../auth/AuthProvider";
 import { useTenant } from "../tenant/TenantProvider";
@@ -21,13 +21,14 @@ export function useAuthedQuery<T>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(Boolean(path));
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedDataRef = useRef(false);
 
   async function refresh() {
     if (!path || !auth.authenticated) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    setLoading(!hasLoadedDataRef.current);
     setError(null);
     try {
       const accessToken = await auth.getAccessToken();
@@ -36,6 +37,7 @@ export function useAuthedQuery<T>(
         activeTenantId: tenant.activeTenantId,
       });
       setData(payload);
+      hasLoadedDataRef.current = true;
     } catch (caught) {
       if (caught instanceof ApiError) {
         setError(caught.message);
@@ -48,6 +50,10 @@ export function useAuthedQuery<T>(
   }
 
   useEffect(() => {
+    hasLoadedDataRef.current = false;
+    setData(null);
+    setError(null);
+    setLoading(Boolean(path));
     void refresh();
   }, [path, auth.authenticated, tenant.activeTenantId]);
 
