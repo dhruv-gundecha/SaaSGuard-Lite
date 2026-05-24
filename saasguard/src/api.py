@@ -482,6 +482,17 @@ def download_export(
         api_export_download_denials_total.labels(
             **tenant_metric_labels(job["tenant_id"])
         ).inc()
+        record_audit_event(
+            actor_user_id=user.user_id,
+            actor_sub=user.keycloak_sub,
+            tenant_id=job["tenant_id"],
+            action="export.downloaded",
+            target_type="export_job",
+            target_id=str(job["id"]),
+            outcome="denied",
+            reason="cross-tenant download denied",
+            correlation_id=correlation_id,
+        )
         log_event(
             logger,
             logging.WARNING,

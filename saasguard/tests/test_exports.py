@@ -195,14 +195,23 @@ def test_cross_tenant_download_is_denied(client, bob_user, monkeypatch):
         status="completed",
         object_key=f"exports/tenant_alpha/{job_id}.csv",
     )
+    audit_events = []
 
     app.dependency_overrides[get_current_user] = lambda: bob_user
     monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
+    monkeypatch.setattr("src.api.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
 
     response = client.get(f"/jobs/{job_id}/download")
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Access to this export is denied"}
+    assert audit_events
+    assert audit_events[0]["action"] == "export.downloaded"
+    assert audit_events[0]["tenant_id"] == "tenant_alpha"
+    assert audit_events[0]["actor_user_id"] == bob_user.user_id
+    assert audit_events[0]["target_id"] == str(job_id)
+    assert audit_events[0]["outcome"] == "denied"
+    assert audit_events[0]["reason"] == "cross-tenant download denied"
 
 
 def test_queued_job_cannot_be_downloaded(client, alice_user, monkeypatch):
