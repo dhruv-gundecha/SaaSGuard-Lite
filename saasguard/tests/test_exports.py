@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from src.api import app
 from src.auth import get_current_user
+from src.metrics import api_tenant_authorization_denials_total, tenant_metric_labels
 from src.tasks import export_job
 
 
@@ -72,6 +73,40 @@ def test_post_exports_creates_job_for_authorized_analyst_and_enqueues_only_job_i
     assert delay_calls == [((str(created_job["id"]),), {})]
 
 
+def test_post_exports_rate_limits_excessive_requests(client, alice_user, monkeypatch):
+    created_job = _job_record(
+        job_id=uuid4(),
+        tenant_id="tenant_alpha",
+        requester_user_id=alice_user.user_id,
+    )
+    create_job_calls = []
+    audit_events = []
+
+    app.dependency_overrides[get_current_user] = lambda: alice_user
+    monkeypatch.setattr("src.api.create_job", lambda **kwargs: create_job_calls.append(kwargs) or created_job)
+    monkeypatch.setattr("src.api.export_job", SimpleNamespace(delay=lambda *args, **kwargs: None))
+    monkeypatch.setattr("src.api.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
+    monkeypatch.setattr(
+        "src.rate_limit.get_settings",
+        lambda: SimpleNamespace(
+            export_request_rate_limit_count=2,
+            export_request_rate_limit_window_seconds=60,
+        ),
+    )
+
+    first = client.post("/exports")
+    second = client.post("/exports")
+    third = client.post("/exports")
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert third.status_code == 429
+    assert third.json() == {"detail": "Export request rate limit exceeded"}
+    assert len(create_job_calls) == 2
+    assert audit_events[-1]["action"] == "export.rate_limited"
+    assert audit_events[-1]["outcome"] == "denied"
+
+
 def test_get_job_denies_cross_tenant_access(client, bob_user, monkeypatch):
     alpha_job_id = uuid4()
     alpha_job = _job_record(
@@ -79,9 +114,13 @@ def test_get_job_denies_cross_tenant_access(client, bob_user, monkeypatch):
         tenant_id="tenant_alpha",
         requester_user_id="user-alice",
     )
+    audit_events = []
+    before = api_tenant_authorization_denials_total.labels(
+        action="job.viewed", **tenant_metric_labels("tenant_beta")
+    )._value.get()
 
     app.dependency_overrides[get_current_user] = lambda: bob_user
-    monkeypatch.setattr("src.api.record_audit_event", lambda **_: None)
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
     monkeypatch.setattr("src.api.get_job_for_tenant", lambda job_id, tenant_id: None)
     monkeypatch.setattr(
         "src.api.get_job", lambda job_id: alpha_job if job_id == alpha_job_id else None
@@ -93,6 +132,14 @@ def test_get_job_denies_cross_tenant_access(client, bob_user, monkeypatch):
     assert response.json() == {"detail": "Access to this job is denied"}
     assert "tenant_id" not in response.text
     assert "requester_user_id" not in response.text
+    assert audit_events
+    assert audit_events[0]["action"] == "authorization.denied"
+    assert audit_events[0]["outcome"] == "denied"
+    assert audit_events[0]["reason"] == "job.viewed: cross-tenant access denied"
+    after = api_tenant_authorization_denials_total.labels(
+        action="job.viewed", **tenant_metric_labels("tenant_beta")
+    )._value.get()
+    assert after == before + 1
 
 
 def test_worker_reloads_authoritative_job_context_from_database(monkeypatch):
@@ -199,19 +246,37 @@ def test_cross_tenant_download_is_denied(client, bob_user, monkeypatch):
 
     app.dependency_overrides[get_current_user] = lambda: bob_user
     monkeypatch.setattr("src.api.get_job", lambda requested_job_id: job if requested_job_id == job_id else None)
-    monkeypatch.setattr("src.api.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
 
     response = client.get(f"/jobs/{job_id}/download")
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Access to this export is denied"}
     assert audit_events
-    assert audit_events[0]["action"] == "export.downloaded"
+    assert audit_events[0]["action"] == "authorization.denied"
     assert audit_events[0]["tenant_id"] == "tenant_alpha"
     assert audit_events[0]["actor_user_id"] == bob_user.user_id
     assert audit_events[0]["target_id"] == str(job_id)
     assert audit_events[0]["outcome"] == "denied"
-    assert audit_events[0]["reason"] == "cross-tenant download denied"
+    assert audit_events[0]["reason"] == "export.downloaded: cross-tenant download denied"
+
+
+def test_invalid_active_tenant_selection_records_authorization_denied(
+    client, carol_user, monkeypatch
+):
+    audit_events = []
+
+    app.dependency_overrides[get_current_user] = lambda: carol_user
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
+
+    response = client.post("/exports", headers={"X-Active-Tenant": "tenant_gamma"})
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Requested tenant is not available for this user"}
+    assert audit_events
+    assert audit_events[0]["action"] == "authorization.denied"
+    assert audit_events[0]["target_id"] == "tenant_gamma"
+    assert audit_events[0]["reason"] == "tenant.select: requested tenant is not available for this user"
 
 
 def test_queued_job_cannot_be_downloaded(client, alice_user, monkeypatch):

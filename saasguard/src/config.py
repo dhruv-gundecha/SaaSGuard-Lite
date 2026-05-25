@@ -68,6 +68,12 @@ class Settings:
         self.metrics_tenant_labels_enabled = (
             os.getenv("METRICS_TENANT_LABELS_ENABLED", "true").lower() == "true"
         )
+        self.export_request_rate_limit_count = int(
+            os.getenv("EXPORT_REQUEST_RATE_LIMIT_COUNT", "5")
+        )
+        self.export_request_rate_limit_window_seconds = int(
+            os.getenv("EXPORT_REQUEST_RATE_LIMIT_WINDOW_SECONDS", "60")
+        )
 
     @property
     def postgres_dsn(self) -> str:

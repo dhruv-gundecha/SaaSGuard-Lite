@@ -15,6 +15,7 @@ from src.auth import AuthenticatedUser, get_current_user
 from src.authz import (
     TenantContext,
     can_access_operations,
+    record_tenant_authorization_denial,
     require_operations_role,
     require_role,
     resolve_active_tenant,
@@ -37,6 +38,7 @@ from src.metrics import (
     api_auth_failures_total,
     api_export_download_denials_total,
     api_export_downloads_total,
+    api_export_rate_limits_total,
     api_authorization_denials_total,
     api_export_requests_created_total,
     api_job_read_denials_total,
@@ -53,6 +55,7 @@ from src.metrics import (
 )
 from src.migrations import bootstrap_database
 from src.operations import build_operations_summary, record_api_request_observation
+from src.rate_limit import check_export_request_rate_limit
 from src.seed_dev_data import ensure_dev_seed_data
 from src.storage import download_csv
 from src.tasks import export_job
@@ -135,6 +138,15 @@ async def request_context_middleware(request: Request, call_next):
     if response is not None:
         response.headers["X-Request-ID"] = request_id
         response.headers["X-Correlation-ID"] = correlation_id
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'"
+        )
     return response
 
 
@@ -148,7 +160,22 @@ def resolve_tenant_context(
     user: AuthenticatedUser = Depends(get_current_user),
     x_active_tenant: str | None = Header(default=None),
 ) -> tuple[AuthenticatedUser, TenantContext, str]:
-    tenant = resolve_active_tenant(user, x_active_tenant)
+    try:
+        tenant = resolve_active_tenant(user, x_active_tenant)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_403_FORBIDDEN and x_active_tenant:
+            record_tenant_authorization_denial(
+                user=user,
+                tenant_id=x_active_tenant,
+                correlation_id=request.state.correlation_id,
+                denied_action="tenant.select",
+                target_type="tenant",
+                target_id=x_active_tenant,
+                reason="requested tenant is not available for this user",
+                event_name="auth.tenant_selection_denied",
+                message="active tenant selection denied",
+            )
+        raise
     log_event(
         logger,
         logging.INFO,
@@ -256,6 +283,22 @@ def create_export(
         correlation_id=correlation_id,
         action="export.requested",
     )
+    try:
+        check_export_request_rate_limit(user_id=user.user_id, tenant_id=tenant.tenant_id)
+    except HTTPException:
+        api_export_rate_limits_total.labels(**tenant_metric_labels(tenant.tenant_id)).inc()
+        record_audit_event(
+            actor_user_id=user.user_id,
+            actor_sub=user.keycloak_sub,
+            tenant_id=tenant.tenant_id,
+            action="export.rate_limited",
+            target_type="tenant",
+            target_id=tenant.tenant_id,
+            outcome="denied",
+            reason="export request rate limit exceeded",
+            correlation_id=correlation_id,
+        )
+        raise
     log_event(
         logger,
         logging.INFO,
@@ -341,28 +384,16 @@ def read_job(
         existing_job = get_job(job_id)
         if existing_job:
             api_job_read_denials_total.inc()
-            record_audit_event(
-                actor_user_id=user.user_id,
-                actor_sub=user.keycloak_sub,
+            record_tenant_authorization_denial(
+                user=user,
                 tenant_id=tenant.tenant_id,
-                action="job.viewed",
+                correlation_id=correlation_id,
+                denied_action="job.viewed",
                 target_type="export_job",
                 target_id=str(job_id),
-                outcome="denied",
                 reason="cross-tenant access denied",
-                correlation_id=correlation_id,
-            )
-            log_event(
-                logger,
-                logging.WARNING,
-                "job.read_denied",
-                "cross-tenant job read denied",
-                job_id=str(job_id),
-                tenant_id=tenant.tenant_id,
-                user_id=user.user_id,
-                keycloak_sub=user.keycloak_sub,
-                correlation_id=correlation_id,
-                outcome="denied",
+                event_name="job.read_denied",
+                message="cross-tenant job read denied",
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -482,29 +513,16 @@ def download_export(
         api_export_download_denials_total.labels(
             **tenant_metric_labels(job["tenant_id"])
         ).inc()
-        record_audit_event(
-            actor_user_id=user.user_id,
-            actor_sub=user.keycloak_sub,
+        record_tenant_authorization_denial(
+            user=user,
             tenant_id=job["tenant_id"],
-            action="export.downloaded",
+            correlation_id=correlation_id,
+            denied_action="export.downloaded",
             target_type="export_job",
             target_id=str(job["id"]),
-            outcome="denied",
             reason="cross-tenant download denied",
-            correlation_id=correlation_id,
-        )
-        log_event(
-            logger,
-            logging.WARNING,
-            "export.download_denied",
-            "export download denied",
-            job_id=str(job["id"]),
-            tenant_id=job["tenant_id"],
-            user_id=user.user_id,
-            keycloak_sub=user.keycloak_sub,
-            correlation_id=correlation_id,
-            outcome="denied",
-            error_message="tenant membership required",
+            event_name="export.download_denied",
+            message="export download denied",
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -617,6 +635,17 @@ def read_operations_summary(
         user=user,
         correlation_id=correlation_id,
         action="operations.viewed",
+    )
+    record_audit_event(
+        actor_user_id=user.user_id,
+        actor_sub=user.keycloak_sub,
+        tenant_id=None,
+        action="operations.viewed",
+        target_type="operations_overview",
+        target_id="global",
+        outcome="success",
+        reason=None,
+        correlation_id=correlation_id,
     )
     return build_operations_summary(
         role=user.internal_role or "unknown",

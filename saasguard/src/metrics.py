@@ -25,10 +25,20 @@ api_authorization_denials_total = Counter(
     "Authorization denials in the API",
     ["action"],
 )
+api_tenant_authorization_denials_total = Counter(
+    "saasguard_api_tenant_authorization_denials_total",
+    "Tenant-scoped authorization denials in the API",
+    tenant_labels + ["action"],
+)
 api_export_requests_created_total = Counter(
     "saasguard_api_export_requests_created_total",
     "Export requests created by the API",
     tenant_labels + ["role"],
+)
+api_export_rate_limits_total = Counter(
+    "saasguard_api_export_rate_limits_total",
+    "Export request rate limit responses",
+    tenant_labels,
 )
 api_job_read_denials_total = Counter(
     "saasguard_api_job_read_denials_total",
