@@ -94,6 +94,7 @@ def test_operations_summary_endpoint_returns_expected_structure(
 
     app.dependency_overrides[get_current_user] = lambda: soc_user
     monkeypatch.setattr("src.api.build_operations_summary", lambda **_: expected)
+    monkeypatch.setattr("src.api.record_audit_event", lambda **_: None)
 
     response = client.get("/operations/summary")
 
@@ -104,13 +105,17 @@ def test_operations_summary_endpoint_returns_expected_structure(
 
 
 def test_operations_summary_denies_analyst_user(client, alice_user, monkeypatch):
+    audit_events = []
     app.dependency_overrides[get_current_user] = lambda: alice_user
-    monkeypatch.setattr("src.authz.record_audit_event", lambda **_: None)
+    monkeypatch.setattr("src.authz.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
 
     response = client.get("/operations/summary")
 
     assert response.status_code == 403
     assert response.json() == {"detail": "User does not have sufficient permissions"}
+    assert audit_events
+    assert audit_events[0]["action"] == "operations.viewed"
+    assert audit_events[0]["outcome"] == "denied"
 
 
 def test_operations_summary_denies_viewer_user(client, viewer_user, monkeypatch):
@@ -135,6 +140,7 @@ def test_operations_summary_denies_tenant_admin_user(client, carol_user, monkeyp
 
 
 def test_operations_summary_allows_soc_admin_user(client, soc_user, monkeypatch):
+    audit_events = []
     expected = {
         "generated_at": "2026-05-17T10:00:00+00:00",
         "scope": {
@@ -153,11 +159,15 @@ def test_operations_summary_allows_soc_admin_user(client, soc_user, monkeypatch)
 
     app.dependency_overrides[get_current_user] = lambda: soc_user
     monkeypatch.setattr("src.api.build_operations_summary", lambda **_: expected)
+    monkeypatch.setattr("src.api.record_audit_event", lambda **kwargs: audit_events.append(kwargs))
 
     response = client.get("/operations/summary")
 
     assert response.status_code == 200
     assert response.json()["scope"]["role"] == "soc_admin"
+    assert audit_events
+    assert audit_events[0]["action"] == "operations.viewed"
+    assert audit_events[0]["outcome"] == "success"
 
 
 def test_operations_summary_allows_ops_admin_user(client, ops_user, monkeypatch):
@@ -179,6 +189,7 @@ def test_operations_summary_allows_ops_admin_user(client, ops_user, monkeypatch)
 
     app.dependency_overrides[get_current_user] = lambda: ops_user
     monkeypatch.setattr("src.api.build_operations_summary", lambda **_: expected)
+    monkeypatch.setattr("src.api.record_audit_event", lambda **_: None)
 
     response = client.get("/operations/summary")
 
@@ -194,6 +205,19 @@ def test_me_includes_internal_operations_authorization(client, soc_user):
     assert response.status_code == 200
     assert response.json()["user"]["internal_role"] == "soc_admin"
     assert response.json()["authorization"]["can_access_operations"] is True
+
+
+def test_security_headers_are_added_to_api_responses(client):
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert response.headers["permissions-policy"] == "camera=(), microphone=(), geolocation=()"
+    assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
 def test_dashboard_summary_remains_tenant_scoped_for_tenant_admin(

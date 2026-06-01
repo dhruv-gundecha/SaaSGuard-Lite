@@ -112,6 +112,7 @@ Tenant labels are used only on bounded tenant metrics in this local stack and in
 - export completed
 - export failed
 - export downloaded
+- denied cross-tenant export download attempts
 
 ## Migrations
 

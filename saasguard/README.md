@@ -181,7 +181,7 @@ curl http://localhost:8000/jobs/<job_id>/download \
   -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-Completed export downloads are served by the FastAPI API, not by direct browser access to MinIO. The backend re-checks authentication, tenant membership, role authorization, completed-job status, and object availability before streaming the CSV back as an attachment. Download events are also written to `audit_events`.
+Completed export downloads are served by the FastAPI API, not by direct browser access to MinIO. The backend re-checks authentication, tenant membership, role authorization, completed-job status, and object availability before streaming the CSV back as an attachment. Successful downloads and denied cross-tenant download attempts are written to `audit_events`.
 
 For multi-tenant users like `carol`, set the active tenant explicitly:
 

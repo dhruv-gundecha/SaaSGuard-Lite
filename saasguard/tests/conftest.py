@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.api import app
 from src.auth import AuthenticatedUser
+from src.rate_limit import reset_export_rate_limits
 
 
 @pytest.fixture
@@ -116,7 +117,9 @@ def ops_user() -> AuthenticatedUser:
 def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr("src.api.bootstrap_database", lambda: None)
     monkeypatch.setattr("src.api.ensure_dev_seed_data", lambda: None)
+    reset_export_rate_limits()
     app.dependency_overrides.clear()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+    reset_export_rate_limits()
