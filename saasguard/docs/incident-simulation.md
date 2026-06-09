@@ -1,94 +1,156 @@
-# Incident Summary
+# Incident Simulation
 
-Name: Authentication Configuration Regression
+## Incident Narrative
 
-# Objective
+The current simulated incident in SaaSGuard-Lite is an authentication-path regression caused by an incorrect API OIDC issuer configuration. This was chosen because it reflects a realistic failure mode in which the platform is mostly up, but valid users still cannot establish working application sessions.
 
-The goal of this simulation was to test whether the SaaSGuard-Lite incident runbook helps an operator detect, investigate, and recover from a realistic authentication failure without assuming a full platform outage. The recorded incident focused on a configuration regression in the API's OIDC validation path.
+## Scenario
 
-# Baseline
+- baseline:
+  - frontend loads normally
+  - valid users can authenticate
+  - tenant context resolves
+  - export creation and download work
+  - Grafana dashboards show healthy signals
+- injected fault:
+  - `OIDC_ISSUER` in the API is changed from the real local Keycloak issuer to an incorrect hostname
+  - the API container is recreated so the wrong issuer becomes active
 
-Before the fault was introduced:
+Expected impact:
 
-- the UI loaded normally
-- authenticated users had visible identity information
-- tenant context was present
-- export creation and download worked
-- Grafana dashboards were healthy
+- the browser UI can still load
+- token validation in the API fails
+- users see broken identity or tenant context
+- authenticated workflows stop working even though several services are still reachable
 
-# Fault Injection
+## Root Cause
 
-The simulated incident changed the API OIDC issuer configuration from:
+The API validated access tokens against the wrong issuer value. Tokens issued by the real Keycloak realm were therefore rejected during bearer-token validation.
 
-```text
-OIDC_ISSUER=http://auth.saasguard.local:8081/realms/saasguard
-```
+This walkthrough also exposed a testing gap that previously existed in the repository: many endpoint tests injected `AuthenticatedUser` directly and therefore validated authorization behavior after authentication, but not the OIDC/JWT validation path itself. Targeted deterministic tests now cover valid-token acceptance plus issuer, audience, expiration, signature, and subject failures in `tests/test_oidc_authentication.py`.
 
-to:
+## Detection Process
 
-```text
-OIDC_ISSUER=http://wrong-host:8081/realms/saasguard
-```
+1. User-visible symptoms appear first:
+   - `Unknown user`
+   - `No tenant scope`
+   - `Invalid bearer token`
+2. Uptime Kuma is checked to distinguish a broad outage from an auth-path failure.
+3. Grafana is reviewed for auth-related spikes.
+4. Loki is queried for token rejection events.
+5. API OIDC configuration is compared with the real Keycloak realm issuer.
 
-After the configuration change, the API container was recreated so the incorrect issuer value became active in the running service.
+## Grafana Evidence
 
-# Detection
+The current Grafana evidence path is:
 
-The first customer-visible symptom was that the frontend still loaded, but authenticated state was broken. Users saw:
+- `Auth and Security / Token Validation Failures`
+- `Auth and Security / Authorization Denials`
+- `Service Health / Auth Failure Rate`
 
-- `Unknown user`
-- `No tenant scope`
-- `Invalid bearer token`
+What should be visible:
 
-Observability signals confirmed the pattern was not a generic outage:
+- token validation failures rising
+- denied activity increasing because authenticated workflows fail downstream
 
-- Grafana `Auth and Security` showed `Token Validation Failures` increasing
-- Grafana also showed `Denied Event Volume` increasing
-- Loki showed `event_name="auth.token_rejected"`
-- Loki error details included `error_type="InvalidIssuerError"`
+## Loki Evidence
 
-# Investigation
+The current Loki evidence path is:
 
-The investigation followed the runbook flow for token validation failures:
+- query: `{compose_service="api"} | json | event_name="auth.token_rejected"`
 
-1. Uptime Kuma was checked first.
-2. Uptime Kuma showed core services such as API, Keycloak, PostgreSQL, Redis, and worker were still up.
-3. Because services were available, the incident was treated as an authentication-path failure rather than a full service outage.
-4. Loki was reviewed for `auth.token_rejected` events.
-5. The `error_type` values were inspected and showed `InvalidIssuerError`.
-6. The API OIDC configuration was compared against the expected Keycloak issuer.
-7. The configured API issuer did not match the actual Keycloak realm issuer.
-8. The root cause was identified as configuration drift between the API OIDC issuer configuration and the real Keycloak issuer.
+Expected log evidence:
 
-This step mattered because `InvalidIssuerError` alone does not prove configuration drift. Similar symptoms could also come from malicious tokens, expired tokens, or frontend token handling issues. The configuration comparison was the point where the root cause became specific.
+- `event_name="auth.token_rejected"`
+- `error_type="InvalidIssuerError"` or equivalent issuer-validation failure context
 
-# Response
+Why this matters:
 
-Response actions were limited to correcting the regression and reloading the affected service:
+- it narrows the issue to the auth-validation path instead of generic API downtime
 
-1. Restore the correct `OIDC_ISSUER` value.
-2. Recreate the API container.
-3. Re-test authenticated requests and UI state.
+## Uptime Kuma Evidence
 
-# Recovery Validation
+Uptime Kuma is used as the first availability discriminator, not as the root-cause tool.
 
-After the API was recreated with the correct issuer:
+Expected evidence pattern:
 
-- the UI again showed valid user identity
-- tenant context was restored
-- valid API requests worked again
-- export creation worked
-- token validation failures stopped increasing
-- no new matching Loki `auth.token_rejected` events appeared after recovery for the same condition
+- API may still be reachable
+- Keycloak may still be reachable
+- other dependencies may still be healthy
 
-Recovery validation focused on both user-facing behavior and observability. Service uptime alone would not have been sufficient because the main failure mode was incorrect token validation in an otherwise running stack.
+This matters because the incident is not a simple “everything is down” outage. It is a correctness failure in authentication validation.
 
-# Evidence Collected
+## Recovery Process
 
-The recorded evidence set for this incident included:
+1. Restore the correct `OIDC_ISSUER`.
+2. Recreate or restart the API so the corrected value is active.
+3. Re-test a valid login and authenticated API flow.
 
-- UI failure state showing broken user and tenant context
-- Grafana token validation spike
-- Loki `InvalidIssuerError` logs
-- OIDC configuration check
-- recovery state after restoring the correct issuer
+## Verification Process
+
+Recovery is considered successful only when both product behavior and observability signals recover.
+
+Verification checklist:
+
+1. the frontend shows a valid user again
+2. tenant context is restored
+3. `/me` returns a valid session
+4. `POST /exports` succeeds for a valid tenant user
+5. token validation failures stop increasing
+6. no new matching Loki rejections appear for the corrected scenario
+
+## Preparedness Document Mapping
+
+This scenario is supported by:
+
+- architecture understanding in [architecture.md](/home/darthdg/saasguard/docs/architecture.md)
+- threat modeling in [threat-model.md](/home/darthdg/saasguard/docs/threat-model.md)
+- security test planning in [security_tests.md](/home/darthdg/saasguard/security_tests.md)
+- runbook guidance in [incident-runbook.md](/home/darthdg/saasguard/docs/incident-runbook.md)
+- OE dashboard validation in [oe-dashboard-verification.md](/home/darthdg/saasguard/docs/oe-dashboard-verification.md)
+- manual drill guidance in [manual-tests-and-missing-alerts.md](/home/darthdg/saasguard/docs/manual-tests-and-missing-alerts.md)
+
+## Compliance Relevance
+
+This incident is relevant to the current compliance mapping because it exercises:
+
+- authentication control correctness
+- monitoring and incident detection capability
+- operational response quality
+- evidence collection through logs, metrics, and runbooks
+
+It supports the current repository’s discussion of SOC 2-style Security and Availability expectations, while not claiming formal certification.
+
+## Pareto Principle Analysis
+
+This incident class is high value because a relatively small number of authentication-path failures can cause a large share of user-facing disruption and operator confusion.
+
+Why it fits a Pareto-style analysis:
+
+- one misconfigured auth setting can break many workflows
+- the initial symptom can look like UI, API, or provisioning failure
+- the same investigation pattern applies to several neighboring incidents
+
+## Similar Incident Classes
+
+The same preparedness pattern should also cover:
+
+- audience mismatch
+- JWKS endpoint failure
+- stale or rotated signing-key mismatch
+- expired-token rejection spikes due to refresh problems
+- Keycloak outage where token issuance fails
+- provisioning mismatch where the token is valid but the internal user mapping fails
+
+## Evidence
+
+Video:
+
+- `<GitHub link or local filename>`
+
+Screenshots:
+
+- Grafana auth failures
+- Loki `InvalidIssuerError`
+- Uptime Kuma healthy services
+- Successful recovery

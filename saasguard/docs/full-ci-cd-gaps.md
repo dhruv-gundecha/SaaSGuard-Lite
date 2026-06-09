@@ -1,49 +1,29 @@
-# Gaps to Full CI/CD
+# CI/CD Gaps
 
-## Current CI/CD Coverage
+This document reflects the current checked-in workflow state.
 
-- GitHub Actions runs automated tests on push and pull requests
-- Tests validate export functionality, tenant isolation, and the async worker trust boundary
-- The CI job executes the same `pytest` suite used locally inside the API container
+## Current Workflow
 
-## Current Limitations
+Workflow file: `.github/workflows/tests.yml`
 
-- No deployment stage
-- No staging environment
-- No production release gates
-- No security scanning yet
-- No dependency vulnerability scanning yet
-- No container image scanning yet
-- No secret scanning beyond GitHub defaults
-- No database migration validation stage beyond current test startup
-- No rollback strategy
-- No infrastructure-as-code validation
-- No performance or load testing
-- No DDoS or rate-limit validation
-- No signed artifacts or SBOM generation
+Current intended behavior:
 
-## Needed Improvements
+- boot Compose
+- show running services
+- run API pytest
+- tear down containers
 
-- Add linting and formatting checks
-- Add dependency scanning
-- Add container image vulnerability scanning
-- Add secret scanning
-- Add migration tests
-- Add staging deployment
-- Add approval gates before production
-- Add release tagging and versioning
-- Add a rollback plan
-- Add monitoring and alert validation after deployment
-- Add load testing for high user volume and malicious request spikes
+## Current Gaps
 
-## Security-Specific CI/CD Gaps
+- `working-directory: saasguard` should be verified against the real repository root
+- `.env` is not created from `.env.example`
+- `frontend/.env` is not created from `frontend/.env.example`
+- frontend production build is not currently run in GitHub Actions
+- OE verification is not currently part of CI
 
-- Need automated checks for authorization regressions across more endpoints
-- Need tests for MinIO object access controls
-- Need tests for Keycloak misconfiguration scenarios
-- Need tests for dev-only flags not being enabled in production
-- Need tests for internal threat assumptions, such as `tenant_admin` misuse or direct database access risks
+## Recommended Fixes
 
-## Conclusion
-
-The current pipeline is a basic CI/CD foundation: it automatically runs the existing automated tests on pushes and pull requests and verifies core product and security behavior. Reaching full CI/CD would require automated security scanning, deployment stages, environment promotion, rollback capability, and post-deployment operational validation.
+1. remove or correct the working directory setting
+2. create both `.env` files from committed templates
+3. add frontend build validation
+4. optionally add `docker compose config` and OE metric verification steps

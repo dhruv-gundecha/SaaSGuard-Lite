@@ -1,0 +1,565 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: saasguard_oe_alerts
+    folder: SaaSGuard Alerts
+    interval: 1m
+    rules:
+      - uid: sg_auth_failure_spike
+        title: SaaSGuard Authentication Failure Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(saasguard_api_auth_failures_total{job="saasguard-api"}[5m])) or vector(0)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+                replaceWithValue: 0
+              type: reduce
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: saasguard-auth-security
+        panelId: 1
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: Authentication failures exceeded the demo threshold in the last five minutes.
+          description: Detects issuer mismatch, audience mismatch, expired-token floods, JWKS validation failures, or token abuse.
+          runbook: docs/incident-runbook.md#token-validation-failure-spike
+        labels:
+          service: saasguard
+          severity: critical
+          category: authentication
+
+      - uid: sg_authz_denial_spike
+        title: SaaSGuard Authorization Denial Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(saasguard_api_authorization_denials_total{job="saasguard-api"}[5m])) or vector(0)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+                replaceWithValue: 0
+              type: reduce
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 10
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: saasguard-auth-security
+        panelId: 2
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        annotations:
+          summary: Authorization denials exceeded the demo threshold in the last five minutes.
+          description: Detects cross-tenant access attempts, privilege escalation attempts, bad membership configuration, or X-Active-Tenant misuse.
+          runbook: docs/incident-runbook.md#authorization-denial-spike
+        labels:
+          service: saasguard
+          severity: high
+          category: authorization
+
+      - uid: sg_export_failure_spike
+        title: SaaSGuard Export Failure Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(saasguard_worker_jobs_failed_total{job="saasguard-worker"}[5m])) or vector(0)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+                replaceWithValue: 0
+              type: reduce
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 2
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: saasguard-tenant-impact
+        panelId: 8
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: Export pipeline failures exceeded the demo threshold.
+          description: Detects sustained export-processing failures from worker or dependency problems without double-counting dependency-specific failure counters. MinIO-specific failures also have a dedicated alert.
+          runbook: docs/incident-runbook.md#worker-failure-spike
+        labels:
+          service: saasguard
+          severity: critical
+          category: exports
+
+      - uid: sg_queue_backlog_growth
+        title: SaaSGuard Queue Backlog Growth
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: ((sum(saasguard_export_jobs{job="saasguard-api",status="queued"}) or vector(0)) > bool 5) or ((max(saasguard_oldest_pending_job_age_seconds{job="saasguard-api"}) or vector(0)) > bool 7200)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+                replaceWithValue: 0
+              type: reduce
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0.5
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: saasguard-tenant-impact
+        panelId: 7
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: Queue depth or oldest pending age exceeded the demo threshold.
+          description: Detects export queue overload, stuck workers, worker slowdown, or Redis/worker problems. Thresholds are intentionally tuned above the seeded demo backlog.
+          runbook: docs/incident-runbook.md#queue-backlog-growth
+        labels:
+          service: saasguard
+          severity: high
+          category: queue
+
+      - uid: sg_worker_failure_retry_spike
+        title: SaaSGuard Worker Failure or Retry Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: (sum(increase(saasguard_worker_jobs_failed_total{job="saasguard-worker"}[10m])) or vector(0)) + (sum(increase(saasguard_worker_job_retries_total{job="saasguard-worker"}[10m])) or vector(0))
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+                replaceWithValue: 0
+              type: reduce
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 5
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: saasguard-service-health
+        panelId: 8
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: Worker failures or retries exceeded the demo threshold.
+          description: Detects retry storms, repeated worker failures, or unstable downstream processing behavior.
+          runbook: docs/incident-runbook.md#worker-failure-spike
+        labels:
+          service: saasguard
+          severity: high
+          category: worker
+
+      - uid: sg_minio_upload_failure_spike
+        title: SaaSGuard MinIO Upload Failure Spike
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: sum(increase(saasguard_worker_minio_upload_failures_total{job="saasguard-worker"}[5m])) or vector(0)
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              range: false
+              refId: A
+          - refId: B
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params: []
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - B
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              settings:
+                mode: dropNN
+                replaceWithValue: 0
+              type: reduce
+          - refId: C
+            datasourceUid: __expr__
+            relativeTimeRange:
+              from: 0
+              to: 0
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 1
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        dashboardUid: saasguard-service-health
+        panelId: 6
+        noDataState: OK
+        execErrState: Alerting
+        for: 5m
+        annotations:
+          summary: MinIO upload failures exceeded the demo threshold.
+          description: Detects object storage outages, bad MinIO credentials, or broken upload paths.
+          runbook: docs/incident-runbook.md#minio-outage
+        labels:
+          service: saasguard
+          severity: critical
+          category: storage

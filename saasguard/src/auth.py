@@ -1,6 +1,8 @@
 import logging
+from json import load as json_load
 from dataclasses import dataclass
 from functools import lru_cache
+from urllib.request import urlopen
 
 import jwt
 from fastapi import Header, HTTPException, status
@@ -34,6 +36,30 @@ class AuthenticatedUser:
 @lru_cache
 def get_jwk_client() -> PyJWKClient:
     return PyJWKClient(get_settings().oidc_jwks_url)
+
+
+def fetch_json_document(url: str) -> dict:
+    with urlopen(url, timeout=2) as response:
+        return json_load(response)
+
+
+def get_oidc_discovery_url() -> str:
+    issuer = get_settings().oidc_issuer.rstrip("/")
+    return f"{issuer}/.well-known/openid-configuration"
+
+
+def fetch_oidc_discovery_document() -> dict:
+    return fetch_json_document(get_oidc_discovery_url())
+
+
+def validate_oidc_issuer_contract() -> None:
+    configured_issuer = get_settings().oidc_issuer
+    published_issuer = fetch_oidc_discovery_document().get("issuer")
+    if published_issuer != configured_issuer:
+        raise ValueError(
+            "OIDC issuer contract mismatch: "
+            f"configured={configured_issuer!r}, published={published_issuer!r}"
+        )
 
 
 def _unauthorized(detail: str) -> HTTPException:
