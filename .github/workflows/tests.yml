@@ -8,6 +8,10 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        working-directory: saasguard
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
