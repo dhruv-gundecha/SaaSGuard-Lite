@@ -8,25 +8,21 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: saasguard
-
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Create test env file
+      - name: Create backend env file
         run: cp .env.example .env
 
-      - name: Verify test env file
+      - name: Create frontend env file
         run: |
-          pwd
-          ls -la
-          echo "---- env example ----"
-          ls -la .env.example
-          echo "---- created env ----"
-          ls -la .env
+          if [ -f frontend/.env.example ]; then
+            cp frontend/.env.example frontend/.env
+          fi
+
+      - name: Validate Docker Compose
+        run: docker compose config
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,6 +35,9 @@ jobs:
 
       - name: Run pytest in API container
         run: docker compose run --rm -v "$PWD:/app" api pytest -v
+
+      - name: Build frontend
+        run: docker compose exec -T frontend npm run build
 
       - name: Show container logs on failure
         if: failure()
