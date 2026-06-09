@@ -2,118 +2,195 @@
 
 ## Overview
 
-SaaSGuard-Lite keeps a simple multi-service shape:
+SaaSGuard-Lite is a multi-container demo platform built around tenant-scoped export processing and operational visibility. The backend implementation, Docker Compose stack, dashboards, and tests are the current source of truth.
 
-- Frontend service handles login, active-tenant selection, export initiation, job inspection, and OE navigation.
-- API service handles authentication, application authorization, job creation, audit writes, and API metrics.
-- Worker service handles asynchronous export execution and worker metrics.
-- PostgreSQL is the source of truth for users, tenants, memberships, jobs, and audit evidence.
-- Redis is the queue transport only.
-- MinIO stores completed CSV exports. Browser downloads still flow through the API so tenant authorization is enforced at read time.
-- Keycloak issues OIDC bearer tokens for local development.
-- Prometheus scrapes metrics.
-- Loki stores logs shipped by Promtail.
-- Grafana provides starter dashboards.
+## Service Layout
 
-## Authentication and authorization split
+```text
+Frontend (React + Vite)
+  |
+  +--> Keycloak for browser login (PKCE)
+  |
+  +--> FastAPI API
+         |
+         +--> PostgreSQL
+         +--> Redis
+         +--> MinIO
+         +--> Prometheus /metrics
+         +--> audit_events
+         |
+         +--> Celery queue message: job_id only
+                    |
+                    v
+                Celery Worker
+                    |
+                    +--> PostgreSQL authoritative job + tenant records
+                    +--> MinIO CSV object upload
+                    +--> Prometheus worker metrics
 
-- The React frontend uses Keycloak PKCE for browser login and does not expose raw tokens in the UI.
-- Keycloak is responsible only for proving identity.
-- The FastAPI application validates issuer, audience, signature, and expiration against Keycloak JWKS.
-- The application maps token `sub` to internal `users.keycloak_sub`.
-- Tenant authorization is resolved from `memberships`, not from token roles.
-- Internal global operations access is resolved from the application `users.internal_role`, not from frontend-only checks.
-- Multi-tenant users select an active tenant with `X-Active-Tenant`.
+Logs --> Promtail --> Loki --> Grafana
+Metrics --> Prometheus --> Grafana
+Availability checks --> Uptime Kuma
+```
 
-## Authoritative data path
+## Core Responsibilities
 
-Application-level tenant controls live in PostgreSQL:
+### Frontend
 
-- `users` defines the internal user registry.
-- `tenants` defines active tenants.
-- `memberships` defines role bindings.
-- `export_jobs` stores the authoritative async context and state machine.
-- `audit_events` stores durable evidence.
+- handles browser sign-in through Keycloak
+- loads `/me` to resolve memberships and operations access
+- stores the active tenant in `sessionStorage`
+- sends `X-Active-Tenant` for tenant-scoped requests
+- exposes the internal-only `Operations` page only when the API session says operations access is allowed
 
-## Async trust boundary
+### API
 
-Queue payloads are intentionally minimal:
+- validates bearer tokens against Keycloak JWKS
+- resolves internal users and tenant memberships from PostgreSQL
+- enforces tenant and internal-role authorization
+- creates export jobs
+- serves job views and secure CSV downloads
+- records audit events
+- exposes Prometheus metrics
+- computes tenant and global operations summaries
 
-- Redis message body: `job_id`
+### Worker
 
-The worker flow is:
+- receives only `job_id` from Redis/Celery
+- reloads authoritative job and tenant context from PostgreSQL
+- fetches tenant records
+- generates CSV content
+- uploads the result to MinIO
+- records completion, retries, and failures
+- exposes worker metrics
 
-1. Receive `job_id`.
-2. Load the job from PostgreSQL.
-3. Atomically claim the job only if it is runnable.
-4. Reconstruct trusted tenant context from the job record already written by the API.
-5. Run tenant-scoped queries using `tenant_id`.
-6. Upload the result to MinIO.
-7. Persist completion or failure state and write correlated logs and audit records.
-8. Serve completed downloads back through `GET /jobs/{job_id}/download` after the API revalidates tenant membership and role access.
+### Datastores and dependencies
 
-This prevents queue tampering from becoming an authorization source.
+- PostgreSQL: users, memberships, tenants, tenant_records, export_jobs, audit_events
+- Redis: broker/transport only
+- MinIO: export object storage
+- Keycloak: OIDC identity provider
 
-## Worker state model
+### Observability
 
-`export_jobs.status` uses:
+- Prometheus scrapes API and worker metrics
+- Promtail ships container logs to Loki
+- Grafana provides provisioned dashboards
+- Uptime Kuma provides separate service-health checks
 
-- `queued`
-- `retry_pending`
-- `processing`
-- `completed`
-- `failed`
+## Application Roles
 
-Transient failures:
+Tenant-scoped roles:
 
-- increment `retry_count`
-- retain stage-specific `failure_stage`
-- requeue only up to the configured limit
+- `viewer`
+- `analyst`
+- `tenant_admin`
 
-Terminal failures:
+Internal roles:
 
-- move to `failed`
-- persist a bounded error message
-- write an audit event
+- `soc_admin`
+- `ops_admin`
 
-## Telemetry
+Important distinction:
 
-### Logs
+- Keycloak proves identity
+- the application decides authorization from PostgreSQL memberships and `users.internal_role`
 
-Application logs are JSON to stdout with correlation and entity fields. Promtail ships them to Loki.
+## Data Flows
 
-### Metrics
+### 1. Authentication flow
 
-Prometheus metrics include:
+1. The browser starts Keycloak PKCE login.
+2. Keycloak returns an access token.
+3. The frontend sends the bearer token to the API.
+4. The API validates issuer, audience, signature, expiration, and subject.
+5. The API maps `sub` to an internal user record and loads memberships.
 
-- API request count and latency
-- auth failures
+### 2. Export creation flow
+
+1. A tenant user calls `POST /exports`.
+2. The API resolves active tenant context.
+3. The API checks that the role is at least `analyst`.
+4. The API creates an `export_jobs` row in PostgreSQL.
+5. The API enqueues only the string form of `job_id`.
+6. The API records audit evidence and metrics.
+
+### 3. Worker processing flow
+
+1. The worker receives `job_id`.
+2. The worker loads the job from PostgreSQL.
+3. The worker claims the job only if it is runnable.
+4. The worker reloads trusted tenant context from the job record.
+5. The worker queries tenant records from PostgreSQL.
+6. The worker writes a CSV to MinIO.
+7. The worker updates job state and emits audit/log/metric evidence.
+
+### 4. Export download flow
+
+1. A tenant user calls `GET /jobs/{job_id}/download`.
+2. The API looks up the job.
+3. The API checks that the user has membership in the job’s tenant.
+4. The API checks role `viewer` or higher.
+5. The API requires the job to be `completed` with a non-null object key.
+6. The API downloads the object from MinIO and streams it back as CSV.
+
+### 5. Operations flow
+
+1. The frontend requests `/operations/summary` only for sessions with internal operations access.
+2. The backend enforces `soc_admin` or `ops_admin`.
+3. The summary combines:
+   - bounded dependency checks
+   - in-memory API traffic observations
+   - PostgreSQL export state
+   - worker metric totals
+4. The frontend links operators to Grafana, Prometheus, Loki, Uptime Kuma, and MinIO.
+
+## Trust Boundaries
+
+### Browser boundary
+
+- the browser is untrusted
+- tenant selection from the browser is validated against memberships
+
+### Identity boundary
+
+- Keycloak proves identity only
+- application authorization is separate
+
+### Queue boundary
+
+- Redis is not trusted to carry tenant context
+- only `job_id` crosses the queue boundary
+
+### Storage boundary
+
+- MinIO stores objects but does not replace application authorization
+- the API remains the download gate
+
+### Observability boundary
+
+- Grafana, Loki, Prometheus, and Uptime Kuma may expose cross-tenant operational context
+- access is therefore more sensitive than tenant-scoped product views
+
+## Current Operational Signals
+
+The current implementation exposes metrics and logs for:
+
+- API request counts and latency
+- authentication failures
 - authorization denials
-- export requests created
-- job read denials
+- job-read denials
+- export request creation
 - worker starts, completions, failures, retries
-- job duration
-- queue wait time
-- DB query failures
 - MinIO upload failures
-- export row counts
+- database query failures
 - queue backlog
 - oldest pending job age
+- stale processing jobs
 
-Tenant labels are used only on bounded tenant metrics in this local stack and intentionally avoid per-user cardinality.
+## Known Limitations
 
-### Audit evidence
-
-`audit_events` persists:
-
-- export requested
-- authorization denied
-- job viewed
-- export completed
-- export failed
-- export downloaded
-- denied cross-tenant export download attempts
-
-## Migrations
-
-The application uses idempotent SQL migrations in [sql/migrations](/home/darthdg/saasguard/sql/migrations). A lightweight migration runner applies them under a PostgreSQL advisory lock at service startup.
+- the frontend container currently runs a development server instead of a production static-serving path
+- the checked-in GitHub Actions workflow does not currently create `.env` files from the examples
+- the current test suite is strongest on backend behavior and lighter on browser-based auth flows
+- the local stack includes demo credentials and admin surfaces appropriate for coursework, not production

@@ -1,168 +1,305 @@
 # Incident Runbook
 
-This runbook is for SaaSGuard-Lite incident handling in the local exercise environment. It focuses on failures that affect Keycloak-backed authentication, tenant-scoped authorization, export processing, and export retrieval. It is an investigation aid, not proof that the system is production-ready.
+This runbook is aligned to the current SaaSGuard-Lite implementation. It covers the incident classes that the code, dashboards, and tests currently support most directly.
 
-# Initial Triage
+## Severity Levels
 
-Start from the first user-visible symptom and then separate availability failures from authentication and authorization failures.
+- `SEV-1`: cross-tenant exposure, broad authentication outage, or a failure that prevents most users from using the platform
+- `SEV-2`: major export disruption, prolonged queue backlog, or dependency outage that blocks core workflows for many users
+- `SEV-3`: localized failures, elevated denials, or degraded operations visibility without broad service loss
 
-Signals to collect at the start:
+## Ownership
 
-- user reports such as `Unknown user`, `No tenant scope`, `Invalid bearer token`, failed export creation, or failed export download
-- Uptime Kuma status for `api`, `frontend`, `keycloak`, `postgres`, `redis`, `worker`, and other core services
-- Grafana dashboard patterns, especially `Auth and Security` and service or worker health panels
-- Loki event patterns for auth, authorization, and worker failures
+- Primary incident owner:
+  - `ops_admin` for availability, queue, and dependency incidents
+  - `soc_admin` for authn/authz anomalies, cross-tenant concerns, and suspicious denial spikes
+- Supporting roles:
+  - application engineer for API or worker regressions
+  - platform/operator for Docker, Keycloak, MinIO, PostgreSQL, or Redis failures
 
-Initial triage steps:
+## Escalation Guidance
 
-1. Reproduce the customer symptom in the UI or with the affected API path.
-2. Check Uptime Kuma first to determine whether this is a simple service outage or a still-running system with failing requests.
-3. If core services are up, move to Grafana to identify whether the pattern is primarily auth-related, authorization-related, or queue/worker-related.
-4. Use Loki to confirm the event family and error types behind the metric spike.
-5. Keep the investigation broad at first. Do not jump to a single root cause before validating what failed and what remained healthy.
+- Escalate immediately to `SEV-1` if there is suspected cross-tenant disclosure.
+- Escalate to the application owner if healthy dependencies plus degraded application behavior suggest a config or release regression.
+- Treat system-wide auth failures separately from generic uptime failures because the Operations page itself may be unavailable during auth-wide incidents.
 
-Operational note:
+## Standard Response Structure
 
-- Operations Overview may not be accessible during a system-wide authentication incident because it depends on the same authentication path. During this type of incident, Grafana, Loki, and Uptime Kuma are the primary investigation tools.
+For every incident class:
 
-# MinIO Outage
+1. Detect
+2. Investigate
+3. Respond
+4. Recover
+5. Verify
 
-Signals:
+## Token Validation Failure Spike
 
-- export creation may succeed but completion or download later fails
-- worker failures or retries increase
-- Loki shows storage-related worker errors such as upload failures
-- Uptime Kuma or direct checks show MinIO unavailable
+### Severity
 
-Investigation steps:
+- default `SEV-2`
+- escalate to `SEV-1` if most users cannot authenticate or if the source is suspicious token activity at scale
 
-1. Check Uptime Kuma for MinIO reachability and whether the outage is isolated to MinIO or part of a wider stack problem.
-2. Confirm the worker is still running so the symptom is not being caused by worker loss instead of storage loss.
-3. Query Loki for worker storage failures and review whether failures are concentrated at upload or download stages.
-4. Check MinIO container health, credentials, bucket configuration, and whether the MinIO console is reachable.
-5. Review whether export jobs are building backlog in queued, retry-pending, or failed states while MinIO is down.
+### Detect
 
-Recovery validation:
+- Grafana `Auth and Security / Token Validation Failures`
+- Loki `event_name="auth.token_rejected"`
+- user-visible `Invalid bearer token`, `Unknown user`, or missing tenant context
+- Alert trigger: `SaaSGuard Authentication Failure Spike`
 
-1. Confirm MinIO is reachable again.
-2. Verify worker retries or new jobs can complete after restoration.
-3. Create a fresh export after MinIO is restored.
-4. Confirm the export reaches a successful state.
-5. Download the newly created export and verify the artifact is retrievable end to end.
+### Investigate
 
-# Token Validation Failure Spike
+1. Check Uptime Kuma for API and Keycloak reachability.
+2. Confirm the API is serving requests at all.
+3. Query Loki for `auth.token_rejected`.
+4. Review `error_type` in logs.
+5. Compare `OIDC_ISSUER`, `OIDC_JWKS_URL`, and `OIDC_AUDIENCE` with the expected Keycloak realm/client settings.
 
-This is the primary authentication incident pattern demonstrated in the recorded simulation.
+### Respond
 
-Signals:
+1. Correct the failing OIDC configuration or dependency state.
+2. Restart or recreate the API if configuration changed.
+3. Avoid changing authorization logic until token validation is confirmed healthy.
+4. First response action: confirm whether the issue is token-validation drift or a broader Keycloak outage before restarting unrelated services.
 
-- `Auth and Security` dashboard shows `Token Validation Failures` increasing
-- API logs show `auth.token_rejected`
-- frontend shows `Unknown user`, `No tenant scope`, or `Invalid bearer token`
+### Recover
 
-Investigation:
+1. Restore correct API OIDC settings.
+2. Confirm Keycloak JWKS reachability.
+3. Re-test authenticated API requests.
 
-1. Confirm Keycloak is reachable.
-2. Confirm API is reachable.
-3. Check Uptime Kuma for service health.
-4. Query Loki for `auth.token_rejected`.
-5. Review `error_type` values.
-6. Do not immediately assume configuration drift.
-7. Consider malicious tokens, expired tokens, frontend token issues, and OIDC configuration drift.
-8. Compare `OIDC_ISSUER`, `OIDC_JWKS_URL`, and `OIDC_AUDIENCE` against Keycloak configuration.
-9. Restore correct configuration if mismatch is found.
+### Verify
 
-Interpretation guidance:
+1. `/me` returns a valid user again.
+2. tenant context resolves again.
+3. `POST /exports` works for a valid user.
+4. token validation failures stop rising.
+5. no new matching Loki token-rejection events appear for the same failure mode.
+6. Recovery validation: the alert returns to `Normal` after the incident window passes.
 
-- If Keycloak is down, the issue may be token acquisition or discovery related rather than issuer validation.
-- If the API is down, fix availability first because auth symptoms may be secondary.
-- If Uptime Kuma shows core services healthy but Grafana and Loki show rising token validation failures, treat this as an authentication-path regression until disproven.
-- `InvalidIssuerError` strongly suggests issuer mismatch, but it still does not prove whether the cause is backend drift, malicious tokens from another issuer, or a frontend using the wrong identity provider. Check the actual configured issuer before concluding.
+## OIDC Issuer Mismatch
 
-Recovery actions:
+### Severity
 
-1. Restore the correct OIDC configuration values.
-2. Recreate or restart the API container so the corrected values are loaded.
-3. Re-test authenticated UI and API flows with a valid Keycloak-issued token.
+- default `SEV-2`
+- can become `SEV-1` if it affects all logins and operators lose access to in-product investigation pages
 
-Note:
+### Detect
 
-- Operations Overview may not be accessible during a system-wide authentication incident because it depends on the same authentication path. During this type of incident, Grafana, Loki, and Uptime Kuma are the primary investigation tools.
+- Grafana token validation failures rise
+- Loki shows `InvalidIssuerError`
+- Uptime Kuma still shows API and Keycloak broadly reachable
+- Alert trigger: `SaaSGuard Authentication Failure Spike`
 
-# Authorization Denial Spike
+### Investigate
 
-Signals:
+1. Confirm the incident is not a generic Keycloak outage.
+2. Compare the configured issuer against the real Keycloak realm issuer.
+3. Verify the failure is in API validation, not browser login redirection.
 
-- rising authorization denials in Grafana
-- repeated cross-tenant access attempts
-- unauthorized Operations Overview access attempts
-- suspicious or incorrect `X-Active-Tenant` usage
+### Respond
 
-Investigation steps:
+1. Restore the correct `OIDC_ISSUER`.
+2. Recreate the API container.
+3. First response action: compare the configured issuer against the real realm issuer before changing any other auth setting.
 
-1. Determine whether denials are normal policy enforcement or an unexpected spike.
-2. Review audit and Loki data for cross-tenant access attempts and repeated denied operations.
-3. Check whether users are attempting unauthorized Operations Overview access with roles that should not have it.
-4. Inspect requests for missing, stale, or incorrect `X-Active-Tenant` values.
-5. Verify whether the denied principal should have access to the tenant or action they attempted.
-6. Distinguish malicious probing from a frontend or membership regression before changing authorization logic.
+### Recover
 
-Audit and log review focus:
+1. Login through the frontend again.
+2. Confirm `/me` resolves identity and memberships.
 
-- cross-tenant reads or writes that were correctly denied
-- repeated denied admin or operations endpoints
-- patterns showing one user or client repeatedly sending the wrong active tenant
+### Verify
 
-# Queue Backlog Growth
+1. valid bearer tokens are accepted again.
+2. export creation works.
+3. authorization and tenant context are restored.
+4. Recovery validation: Grafana auth-failure rate returns to baseline and the alert clears.
 
-Signals:
+## Authorization Denial Spike
 
-- queued jobs increasing
-- oldest pending age increasing
-- low worker completions
+### Severity
 
-Investigation steps:
+- default `SEV-3`
+- escalate to `SEV-2` if it blocks legitimate workflows broadly
+- escalate to `SEV-1` if it indicates or masks cross-tenant leakage
 
-1. Confirm whether the worker container is running and stable.
-2. Check Redis health because it is on the queue path.
-3. Check PostgreSQL health because the worker depends on persisted job state and tenant data.
-4. Review worker throughput versus backlog growth in Grafana.
-5. Use Loki to see whether the worker is failing jobs, retrying them, or not receiving work at all.
-6. Determine whether the backlog is caused by demand spike, worker failure, Redis issues, PostgreSQL issues, or a downstream dependency such as MinIO.
+### Detect
 
-# Worker Failure Spike
+- Grafana `Authorization Denials`
+- audit-event denial spikes
+- repeated `job.read_denied` or operations access denials
+- Alert trigger: `SaaSGuard Authorization Denial Spike`
 
-Signals:
+### Investigate
 
-- worker failures increasing
-- repeated failures at the same processing stage
-- fresh exports not completing
+1. Determine whether the spike is expected policy enforcement or a regression.
+2. Review denied action names and target types in audit events.
+3. Check whether `X-Active-Tenant` usage is wrong or stale.
+4. Determine whether the pattern is user error, client bug, or probing.
 
-Investigation steps:
+### Respond
 
-1. Review worker failure metrics and confirm the spike is current rather than historical noise.
-2. Check `failure_stage` values to identify whether jobs are failing on read, transform, persist, upload, or other stages.
-3. Query Loki worker logs for matching failures and stack context.
-4. Correlate worker failures with Redis, PostgreSQL, and MinIO health.
-5. Apply the mitigation for the failing dependency or code path.
-6. Validate with a fresh export after mitigation rather than assuming recovery from restored metrics alone.
+1. Fix membership or tenant-selection regressions if legitimate users are blocked.
+2. If suspicious probing exists, preserve logs and treat the behavior as a security review case.
+3. First response action: determine whether the spike is expected enforcement, user error, or suspicious activity before changing access-control code.
 
-# Recovery Validation
+### Recover
 
-Recovery is not complete until both observability and user workflows return to expected behavior.
+1. restore correct access path for legitimate users.
+2. keep denied actions denied for unauthorized users.
 
-Validate the following:
+### Verify
 
-1. user identity restored
-2. tenant context restored
-3. export creation works
-4. export download works
-5. auth failure metric stops increasing
-6. no new `auth.token_rejected` events
-7. dashboards return to normal
+1. valid tenant workflows succeed.
+2. denials return to expected levels.
+3. no unintended operations access appears for tenant users.
+4. Recovery validation: the authorization-denial alert clears after the spike ends.
 
-Additional guidance:
+## MinIO Outage
 
-- Use a fresh login or valid token after auth recovery so stale client state does not confuse the result.
-- Prefer a fresh export created after remediation when validating queue, worker, or storage recovery.
-- Treat the absence of new errors over a short window as a positive signal, not proof that every edge case is resolved.
+### Severity
+
+- default `SEV-2`
+
+### Detect
+
+- rising `saasguard_worker_minio_upload_failures_total`
+- failed jobs at upload stage
+- download or completion failures
+- MinIO unavailable in Uptime Kuma or direct checks
+- Alert trigger: `SaaSGuard MinIO Upload Failure Spike`
+
+### Investigate
+
+1. Confirm whether the outage is isolated to MinIO.
+2. Confirm the worker is still running.
+3. Check MinIO credentials, bucket access, and console reachability.
+4. Review worker logs for upload failures and retry behavior.
+
+### Respond
+
+1. restore MinIO service or configuration.
+2. do not scale workers blindly until storage is healthy.
+3. First response action: confirm whether the failure is a MinIO outage, bucket issue, or credential misconfiguration.
+
+### Recover
+
+1. confirm bucket reachability.
+2. create a fresh export after recovery.
+
+### Verify
+
+1. a new export completes.
+2. the CSV downloads successfully through the API.
+3. MinIO upload failures stop increasing.
+4. Recovery validation: the MinIO alert clears and no new upload-failure spikes are observed.
+
+## Queue Backlog Growth
+
+### Severity
+
+- default `SEV-2`
+- escalate to `SEV-1` if backlog is severe enough that users effectively cannot receive reports
+
+### Detect
+
+- Grafana `Global Queue Pressure`
+- high `queued` and `retry_pending`
+- high `oldest pending job age`
+- Alert trigger: `SaaSGuard Queue Backlog Growth`
+
+### Investigate
+
+1. Check worker health first.
+2. Check Redis, PostgreSQL, and MinIO health.
+3. Compare export request rate against worker completion rate.
+4. Review whether the backlog is demand-driven or failure-driven.
+
+### Respond
+
+1. fix the blocking dependency or worker failure mode.
+2. apply temporary load controls if the queue is growing from request bursts.
+3. First response action: verify whether the issue is worker-side, Redis-side, or downstream dependency-related before trying to scale anything.
+
+### Recover
+
+1. allow the worker to drain healthy backlog.
+2. submit a fresh export to prove recovery.
+
+### Verify
+
+1. queue age starts falling.
+2. completed exports increase again.
+3. users can download fresh reports.
+4. Recovery validation: the backlog alert clears after queue depth and oldest-age return below threshold.
+
+## Worker Failure Spike
+
+### Severity
+
+- default `SEV-2`
+
+### Detect
+
+- rising worker failures and retries
+- low completion rate
+- export jobs stuck or failing
+- Alert trigger: `SaaSGuard Export Failure Spike` and `SaaSGuard Worker Failure or Retry Spike`
+
+### Investigate
+
+1. Check `failure_stage` in metrics and job records.
+2. Review worker logs for records-load, upload, or unexpected failure patterns.
+3. Correlate failures with Redis, PostgreSQL, and MinIO health.
+
+### Respond
+
+1. address the failing stage rather than restarting everything blindly.
+2. preserve evidence for repeated unexpected failures.
+3. First response action: identify whether failures cluster in `records_load`, `upload`, or `unexpected` paths.
+
+### Recover
+
+1. restore the broken dependency or code path.
+2. create a fresh export after mitigation.
+
+### Verify
+
+1. job completion resumes.
+2. retries and failures return to normal.
+3. download works for a newly completed export.
+4. Recovery validation: worker failure and retry alerts return to `Normal`.
+
+## Cross-Tenant Exposure or Suspected Exposure
+
+### Severity
+
+- always `SEV-1`
+
+### Detect
+
+- unexpected tenant data in job or export output
+- authorization behavior inconsistent with membership rules
+- audit or log evidence suggesting cross-tenant access was not denied
+
+### Investigate
+
+1. isolate the affected job IDs, tenant IDs, and users immediately.
+2. preserve audit, log, and job-state evidence.
+3. determine whether the failure is in read authorization, download authorization, or worker context handling.
+
+### Respond
+
+1. stop affected traffic or disable export/download functionality if scope is unknown.
+2. do not treat this as a normal availability incident.
+
+### Recover
+
+1. fix the boundary failure.
+2. re-run tenant-isolation tests before restoring normal operation.
+
+### Verify
+
+1. cross-tenant access is denied again.
+2. authoritative worker-context behavior still holds.
+3. secure download path still enforces tenant membership.

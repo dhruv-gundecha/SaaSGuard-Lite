@@ -1,115 +1,140 @@
 # OE Dashboard Verification
 
-This document records how the provisioned Grafana dashboards were verified against live SaaSGuard-Lite behavior and which metrics power the key operational panels.
+This document records the current Operational Excellence dashboard surfaces that are actually present in the repository and how they are meant to be verified.
 
-## Verified Dashboards
+## Current Dashboard Set
+
+Provisioned Grafana dashboards:
 
 - `Service Health`
 - `Tenant Impact`
 - `Auth and Security`
 
-## Validation Snapshot
+Supporting operator surfaces:
 
-Validation run date: `2026-05-18` in the local Docker Compose stack.
+- frontend `Operations` page
+- Prometheus
+- Loki through Grafana Explore
+- Uptime Kuma
 
-- `./scripts/verify_oe_metrics.sh` passed after confirming the API metrics from the `api` container and worker metrics from the `worker` container independently.
-- `curl http://localhost:8000/metrics` showed live API and DB-backed gauge series including `saasguard_api_auth_failures_total`, `saasguard_export_jobs`, `saasguard_export_job_duration_avg_seconds`, `saasguard_queue_backlog_jobs`, `saasguard_oldest_pending_job_age_seconds`, and `saasguard_stale_processing_jobs`.
-- `curl http://localhost:9101/metrics` showed live worker series including `saasguard_worker_jobs_started_total`, `saasguard_worker_jobs_failed_total`, `saasguard_worker_job_retries_total`, and `saasguard_worker_minio_upload_failures_total`.
-- Prometheus instant queries confirmed the provisioned dashboard expressions resolve against live data for:
-  - `Service Health / API Requests Per Minute`
-  - `Service Health / Queue Backlog`
-  - `Tenant Impact / Failed Exports By Tenant`
-  - `Tenant Impact / Worker Retry and Failure Stages`
-  - `Auth and Security / Token Validation Failures`
-  - `Auth and Security / Cross-Tenant Job Access Denials`
-- One cheap live auth event was generated with `GET /me` using an invalid bearer token. That produced a `401`, incremented `saasguard_api_auth_failures_total`, and emitted a Loki event with `event_name="auth.token_rejected"`.
-- `Auth and Security / Authorization Denials` was patched to fall back to a labeled zero series when no `403` route labels have been emitted yet, which prevents a misleading permanent `No data` state on a quiet stack.
-- `Auth and Security / Denied Event Volume (1h)` now groups denied Loki events by `event_name` instead of `keycloak_sub`. This matches the real local signal better because invalid-token rejections do not always carry a subject identifier.
+## What the Current Dashboards Cover
 
-## Metric Sources By Panel
+### Service Health
 
-- `Tenant Impact / Failed Exports By Tenant`
-  Uses `saasguard_export_jobs{job="saasguard-api",status="failed"}`.
-- `Tenant Impact / Completed Jobs By Tenant`
-  Uses `saasguard_export_jobs{job="saasguard-api",status="completed"}`.
-- `Tenant Impact / Export Requests By Tenant (24h)`
-  Uses `increase(saasguard_api_export_requests_created_total{job="saasguard-api"}[24h])`.
-- `Tenant Impact / Successful Export Latency By Tenant`
-  Uses `saasguard_export_job_duration_avg_seconds{job="saasguard-api",status="completed"}`.
-- `Tenant Impact / Affected Tenants Count`
-  Uses `saasguard_export_jobs{job="saasguard-api",status=~"failed|retry_pending|queued"}` plus `saasguard_stale_processing_jobs{job="saasguard-api"}`.
-- `Tenant Impact / Global Queue Pressure`
-  Uses `saasguard_export_jobs{job="saasguard-api",status=...}` and `saasguard_oldest_pending_job_age_seconds{job="saasguard-api"}`.
-- `Tenant Impact / Worker Retry and Failure Stages`
-  Uses `increase(saasguard_worker_job_retries_total{job="saasguard-worker"}[5m])` and `increase(saasguard_worker_jobs_failed_total{job="saasguard-worker"}[5m])`, grouped by `failure_stage`.
-- `Tenant Impact / Worker Dependency Failures`
-  Uses `increase(saasguard_worker_minio_upload_failures_total{job="saasguard-worker"}[5m])` and `increase(saasguard_worker_db_query_failures_total{job="saasguard-worker"}[5m])`.
-- `Service Health / Metrics Scrape Health`
-  Uses `up{job=~"saasguard-api|saasguard-worker"}`.
-- `Auth and Security / Token Validation Failures`
-  Uses `saasguard_api_auth_failures_total`.
-- `Auth and Security / Authorization Denials`
-  Uses `saasguard_api_authorization_denials_total`.
-- `Auth and Security / Cross-Tenant Job Access Denials`
-  Uses `saasguard_api_job_read_denials_total`.
-- `Auth and Security / Export Requests By Role`
-  Uses `saasguard_api_export_requests_created_total`.
-- `Auth and Security / Denied Event Volume (1h)`
-  Uses Loki query `topk(10, sum by (event_name) (count_over_time({compose_service="api"} | json | outcome="denied" [1h])))`.
-- `Auth and Security / Auth and Job Events`
-  Uses Loki query `{compose_service="api"} | json | event_name=~"export.request_received|job.read_allowed|job.read_denied|auth.authorization_denied"`.
-- `Auth and Security / Token Rejection Events`
-  Uses Loki query `{compose_service="api"} | json | event_name="auth.token_rejected"`.
-- `Auth and Security / Cross-Tenant Denial Events`
-  Uses Loki query `{compose_service="api"} | json | event_name="job.read_denied"`.
+- API requests per minute
+- API error rate
+- auth failure rate
+- worker throughput
+- queue backlog
+- dependency failures
+- export request rate
+- worker failures and retries
+- API latency and queue-wait p95
+- Prometheus scrape health
 
-## MinIO Outage Scenario
+### Tenant Impact
 
-Scenario: MinIO outage
+- failed exports by tenant
+- completed jobs by tenant
+- export requests by tenant
+- successful export latency by tenant
+- affected tenant count
+- top tenants by job volume
+- global queue pressure
+- worker retry and failure stages
+- worker dependency failures
+- metrics scrape health
 
-1. `docker compose stop minio`
-2. Create an export from the frontend or call `POST /exports`.
-3. Wait for the worker retry and eventual terminal failure.
-4. Confirm Loki shows `worker.export.upload_failed` with message `object upload failed`.
-5. Confirm Loki shows `worker.job_failed` with message `retry limit exceeded for transient failure`.
-6. Confirm the Prometheus query `sum(increase(saasguard_worker_minio_upload_failures_total{job="saasguard-worker"}[5m]))` increases above `0`.
-7. Confirm the `Tenant Impact / Worker Dependency Failures` panel shows MinIO upload failures `> 0`.
-8. Confirm `Tenant Impact / Global Queue Pressure` and `Failed Exports By Tenant` reflect the pending or failed job state.
-9. `docker compose start minio`
-10. Create another export.
-11. Confirm `saasguard_worker_minio_upload_failures_total` stops increasing and successful job completion/latency recover.
+### Auth and Security
 
-## How To Verify With Loki
+- token validation failures
+- authorization denials
+- cross-tenant job access denials
+- export requests by role
+- denied event volume from Loki
+- auth and job event logs
+- token rejection logs
+- cross-tenant denial logs
 
-- Open Grafana Explore against Loki.
-- Query:
-  - `{compose_service="api"} | json | event_name="auth.token_rejected"`
-  - `{compose_service="api"} | json | event_name="export.request_received"`
-  - `{compose_service="api"} | json | event_name=~"job.read_allowed|job.read_denied|auth.authorization_denied"`
-- For worker-side outage verification in the current local stack, use the plain-text messages that are actually present in Celery logs:
-  - `{compose_service="worker"} |= "object upload failed"`
-  - `{compose_service="worker"} |= "retry limit exceeded for transient failure"`
-  - `{compose_service="worker"} |= "transient job failure scheduled for retry"`
-- Match the time range against the Grafana `Tenant Impact` panels and the worker failure counters in Prometheus.
+## Operations Page Coverage
 
-## How To Verify With Prometheus
+The frontend `Operations` page currently summarizes:
 
-- Open Prometheus at `http://localhost:9090`.
-- Check targets:
-  - `up{job="saasguard-api"}`
-  - `up{job="saasguard-worker"}`
-- Check worker failure counters:
-  - `sum(increase(saasguard_worker_minio_upload_failures_total{job="saasguard-worker"}[5m]))`
-  - `sum by (failure_stage) (increase(saasguard_worker_job_retries_total{job="saasguard-worker"}[5m]))`
-  - `sum by (failure_stage) (increase(saasguard_worker_jobs_failed_total{job="saasguard-worker"}[5m]))`
-- Check DB-backed tenant state gauges:
-  - `saasguard_export_jobs{job="saasguard-api"}`
-  - `saasguard_export_job_duration_avg_seconds{job="saasguard-api",status="completed"}`
-  - `saasguard_stale_processing_jobs{job="saasguard-api"}`
+- API health
+- export pipeline state
+- worker health
+- security and authorization signals
+- dependency health
+- release or regression suspicion
+- investigation shortcuts into Grafana, Prometheus, Loki, Uptime Kuma, and MinIO
+
+Access is intentionally restricted to internal operations roles.
+
+## How to Verify
+
+### Static repository verification
+
+- confirm dashboard JSON files exist in `observability/grafana/dashboards/`
+- confirm provisioning config exists in `observability/grafana/provisioning/`
+- confirm Prometheus datasource and Loki datasource provisioning
+
+### Live stack verification
+
+1. Start the Compose stack.
+2. Open Grafana.
+3. Confirm the three dashboards are provisioned.
+4. Visit the frontend `Operations` page as `soc`.
+5. Confirm the page links to the expected external tools and renders summary sections.
+
+### Metrics verification
+
+Current high-value metrics to verify:
+
+- `saasguard_api_auth_failures_total`
+- `saasguard_api_authorization_denials_total`
+- `saasguard_api_job_read_denials_total`
+- `saasguard_export_jobs`
+- `saasguard_oldest_pending_job_age_seconds`
+- `saasguard_stale_processing_jobs`
+- `saasguard_worker_jobs_started_total`
+- `saasguard_worker_jobs_failed_total`
+- `saasguard_worker_job_retries_total`
+- `saasguard_worker_minio_upload_failures_total`
+
+### Log verification
+
+Current high-value Loki queries:
+
+- `{compose_service="api"} | json | event_name="auth.token_rejected"`
+- `{compose_service="api"} | json | event_name="job.read_denied"`
+- `{compose_service="worker"} | json | event_name="worker.job_failed"`
 
 ## Known Limitations
 
-- The local worker now runs with Celery `--pool=solo` so Prometheus counters stay truthful in the same process that executes jobs. This is appropriate for the local demo stack, but a multi-process production worker would need Prometheus multiprocess support or a separate aggregation strategy.
-- Worker failure verification in Loki currently relies on Celery-emitted plain-text log lines rather than structured `event_name` fields. The Grafana dashboards in this repo use Prometheus for worker failure trends and Loki only for API auth/event investigation.
-- `Successful Export Latency By Tenant` only includes completed jobs. During a hard outage it can remain flat while failed and retry-pending panels rise.
-- DB-backed gauges reflect current PostgreSQL state, not an append-only event history. They are intentionally paired with Loki and worker counters for incident timelines.
+- the repository now commits alert-rule definitions, but the thresholds are intentionally local/demo tuned rather than production tuned
+- Uptime Kuma monitor definitions are not exported as a repository artifact
+- worker-side Loki usefulness is strongest when structured worker event names remain present; some earlier docs relied on plain-text Celery output patterns
+
+## Alerting
+
+Alert provisioning files:
+
+- `observability/grafana/provisioning/alerting/saasguard-alert-rules.yml`
+- `observability/grafana/provisioning/alerting/saasguard-notifications.yml`
+
+These thresholds are intentionally tuned for a local/demo environment and should be raised or otherwise re-tuned for production.
+
+| Alert name | Signal | Threshold | Severity | Related runbook section | How to test locally |
+| --- | --- | --- | --- | --- | --- |
+| SaaSGuard Authentication Failure Spike | `saasguard_api_auth_failures_total` | `increase(...[5m]) > 10` for `2m` | Critical | `docs/incident-runbook.md#token-validation-failure-spike` | induce invalid or wrong-issuer bearer tokens and confirm Grafana Alerting shows the rule firing |
+| SaaSGuard Authorization Denial Spike | `saasguard_api_authorization_denials_total` | `increase(...[5m]) > 10` for `2m` | High | `docs/incident-runbook.md#authorization-denial-spike` | repeatedly call protected endpoints with the wrong tenant or insufficient role |
+| SaaSGuard Export Failure Spike | `saasguard_worker_jobs_failed_total` | `increase(...[5m]) > 2` for `5m` | Critical | `docs/incident-runbook.md#worker-failure-spike` | induce worker-side failure such as storage or DB disruption and watch failed-job volume rise in Grafana Alerting |
+| SaaSGuard Queue Backlog Growth | `saasguard_export_jobs{status="queued"}` or `saasguard_oldest_pending_job_age_seconds` | queued jobs `> 5` or oldest pending age `> 7200s` for `5m` | High | `docs/incident-runbook.md#queue-backlog-growth` | stop or break the worker, create exports, and observe queue depth or oldest-age growth |
+| SaaSGuard Worker Failure or Retry Spike | `saasguard_worker_jobs_failed_total` plus `saasguard_worker_job_retries_total` | combined 10-minute increase greater than `5` for `5m` | High | `docs/incident-runbook.md#worker-failure-spike` | induce repeated transient worker failures and confirm retries/failures accumulate |
+| SaaSGuard MinIO Upload Failure Spike | `saasguard_worker_minio_upload_failures_total` | `increase(...[5m]) > 1` for `5m` | Critical | `docs/incident-runbook.md#minio-outage` | stop MinIO or break MinIO credentials/bucket config and request exports |
+
+Current local-demo notification model:
+
+- alerts are provisioned with a placeholder local-demo contact point
+- no real webhook, Slack, PagerDuty, or email secrets are committed
+- operators should review alert state in the Grafana Alerting UI during local validation
