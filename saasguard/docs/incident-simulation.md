@@ -103,12 +103,12 @@ Verification checklist:
 
 This scenario is supported by:
 
-- architecture understanding in [architecture.md](/home/darthdg/saasguard/docs/architecture.md)
-- threat modeling in [threat-model.md](/home/darthdg/saasguard/docs/threat-model.md)
-- security test planning in [security_tests.md](/home/darthdg/saasguard/security_tests.md)
-- runbook guidance in [incident-runbook.md](/home/darthdg/saasguard/docs/incident-runbook.md)
-- OE dashboard validation in [oe-dashboard-verification.md](/home/darthdg/saasguard/docs/oe-dashboard-verification.md)
-- manual drill guidance in [manual-tests-and-missing-alerts.md](/home/darthdg/saasguard/docs/manual-tests-and-missing-alerts.md)
+- architecture understanding in [architecture.md](architecture.md)
+- threat modeling in [threat-model.md](threat-model.md)
+- security test planning in [security_tests.md](../security_tests.md)
+- runbook guidance in [incident-runbook.md](incident-runbook.md)
+- OE dashboard validation in [oe-dashboard-verification.md](oe-dashboard-verification.md)
+- manual drill guidance in [manual-tests-and-missing-alerts.md](manual-tests-and-missing-alerts.md)
 
 ## Compliance Relevance
 
@@ -143,6 +143,8 @@ The same preparedness pattern should also cover:
 - provisioning mismatch where the token is valid but the internal user mapping fails
 
 ## Evidence
+
+Recording: [incident-video.mp4](../incident-video.mp4)
 
 Video:
 

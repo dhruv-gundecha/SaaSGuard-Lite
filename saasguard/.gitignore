@@ -1,0 +1,6 @@
+.env
+frontend/.env
+__pycache__/
+.pytest_cache/
+frontend/dist/
+*.pyc

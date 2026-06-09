@@ -110,7 +110,6 @@ Fixed since earlier audit:
 
 Still true:
 
-- the current GitHub Actions workflow still needs root-path correction, `.env` bootstrapping, and frontend-build validation
 - demo credentials and local admin surfaces are intentionally present for coursework
 - observability-tool access control outside the application is only partially represented in repo evidence
 

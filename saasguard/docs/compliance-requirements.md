@@ -69,7 +69,7 @@ Current in-scope implementation areas:
 - no formal certification evidence exists
 - MFA enforcement is not demonstrated in the checked-in Keycloak realm
 - backup and restore automation is not demonstrated
-- the CI workflow still needs root-path and `.env` bootstrapping verification
+- the CI workflow covers deterministic backend and frontend checks, but it does not yet automate a live identity-provider or browser-based end-to-end flow
 - the local stack includes demo credentials and local admin surfaces unsuitable for production
 
 ## Current Submission Position
