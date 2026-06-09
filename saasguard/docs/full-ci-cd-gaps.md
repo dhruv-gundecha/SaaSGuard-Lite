@@ -1,6 +1,6 @@
 # CI/CD Gaps
 
-This document reflects the current checked-in workflow state.
+This document reflects the current checked-in workflow state after the final CI cleanup.
 
 ## Current Workflow
 
@@ -8,22 +8,21 @@ Workflow file: `.github/workflows/tests.yml`
 
 Current intended behavior:
 
+- bootstrap backend `.env` from `.env.example`
+- bootstrap `frontend/.env` from `frontend/.env.example`
+- validate `docker compose config`
 - boot Compose
 - show running services
 - run API pytest
+- run frontend build
 - tear down containers
 
 ## Current Gaps
 
-- `working-directory: saasguard` should be verified against the real repository root
-- `.env` is not created from `.env.example`
-- `frontend/.env` is not created from `frontend/.env.example`
-- frontend production build is not currently run in GitHub Actions
 - OE verification is not currently part of CI
+- no live Keycloak/browser E2E auth flow is currently part of CI
 
 ## Recommended Fixes
 
-1. remove or correct the working directory setting
-2. create both `.env` files from committed templates
-3. add frontend build validation
-4. optionally add `docker compose config` and OE metric verification steps
+1. optionally add OE metric verification steps
+2. add one live Keycloak/browser smoke test if scope expands

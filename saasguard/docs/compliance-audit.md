@@ -22,7 +22,7 @@ Overall assessment:
 | Queue trust boundary | Implemented | `job_id`-only queue model and worker reload test | No broker-hardening story beyond design minimization | Keep trust-boundary design explicit |
 | Dashboard provisioning | Implemented | Grafana dashboards, datasources, and alerting provisioned in `observability/grafana/` | Uptime Kuma monitor export is still less reproducible than Grafana provisioning | Export or document monitor definitions if final evidence requires them |
 | Logging and monitoring | Partially implemented | Prometheus, Loki, Grafana, Uptime Kuma | Not all evidence paths are automated in CI | Add OE verification to CI or scheduled drills |
-| CI/CD testing | Partially implemented | `.github/workflows/tests.yml` | Root workflow still appears to need path and `.env` bootstrapping fixes | Correct workflow and add frontend build |
+| CI/CD testing | Implemented for coursework scope | `.github/workflows/tests.yml` | No live browser or live identity-provider E2E auth flow in CI yet | Keep the current workflow and add one live auth smoke test later if needed |
 | Incident response docs | Implemented | runbook and incident simulation | Evidence placeholders still need real final artifacts | Add screenshots or recording links |
 | Backup and recovery | Not implemented | limited discussion only | No backup schedule or restoration drill evidence | Add recovery design and test evidence |
 | MFA | Not implemented | no enforced MFA in checked-in realm | Privileged accounts do not show MFA enforcement | Document or implement MFA for higher environments |

@@ -191,6 +191,5 @@ The current implementation exposes metrics and logs for:
 ## Known Limitations
 
 - the frontend container currently runs a development server instead of a production static-serving path
-- the checked-in GitHub Actions workflow does not currently create `.env` files from the examples
 - the current test suite is strongest on backend behavior and lighter on browser-based auth flows
 - the local stack includes demo credentials and admin surfaces appropriate for coursework, not production

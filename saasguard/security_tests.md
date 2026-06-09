@@ -31,7 +31,7 @@ This matrix reflects the current implementation. It distinguishes between automa
 - live MinIO outage and recovery drill
 - dashboard usefulness checks during real incidents
 
-Current source: [docs/manual-tests-and-missing-alerts.md](/home/darthdg/saasguard/docs/manual-tests-and-missing-alerts.md)
+Current source: [docs/manual-tests-and-missing-alerts.md](docs/manual-tests-and-missing-alerts.md)
 
 ## Highest-Priority Next Tests
 
