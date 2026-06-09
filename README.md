@@ -43,7 +43,7 @@ Container logs ------> Promtail --> Loki --> Grafana
 Edge / dependency checks -------------> Uptime Kuma
 ```
 
-More detail: [docs/architecture.md](/home/darthdg/saasguard/docs/architecture.md)
+More detail: [Architecture](saasguard/docs/architecture.md)
 
 ## Key Features
 
@@ -67,7 +67,7 @@ More detail: [docs/architecture.md](/home/darthdg/saasguard/docs/architecture.md
 
 ## Docker Setup
 
-Primary stack definition: [docker-compose.yml](/home/darthdg/saasguard/docker-compose.yml)
+Primary stack definition: [Docker Compose](saasguard/docker-compose.yml)
 
 Services defined in the current stack:
 
@@ -141,7 +141,7 @@ Local-only note:
 
 ## CI/CD Pipeline
 
-Workflow file: [.github/workflows/tests.yml](/home/darthdg/saasguard/.github/workflows/tests.yml)
+Workflow file: [GitHub Actions Workflow](.github/workflows/tests.yml)
 
 Current checked-in workflow behavior:
 
@@ -188,7 +188,7 @@ Current implementation highlights:
 - backend access to `/operations/summary` is limited to `soc_admin` and `ops_admin`
 - the Operations page links to Grafana, Prometheus, Loki, Uptime Kuma, and the MinIO console
 
-Dashboard evidence: [docs/oe-dashboard-verification.md](/home/darthdg/saasguard/docs/oe-dashboard-verification.md)
+Dashboard evidence: [OE Dashboard Verification](saasguard/docs/oe-dashboard-verification.md)
 
 ## Operational Alerts
 
@@ -196,7 +196,7 @@ Grafana dashboards in this repository are used for investigation. Grafana alert 
 
 Current alert provisioning lives under:
 
-- [observability/grafana/provisioning/alerting/](/home/darthdg/saasguard/observability/grafana/provisioning/alerting)
+- [Grafana Alert Provisioning](saasguard/observability/grafana/provisioning/alerting)
 
 Current local-demo alert coverage includes:
 
@@ -228,7 +228,7 @@ Local demo note:
 
 ## Threat Model
 
-Threat model: [docs/threat-model.md](/home/darthdg/saasguard/docs/threat-model.md)
+Threat model: [Threat Model](saasguard/docs/threat-model.md)
 
 Key modeled threats include:
 
@@ -244,7 +244,7 @@ Key modeled threats include:
 
 ## Security Testing
 
-Security testing matrix: [security_tests.md](/home/darthdg/saasguard/security_tests.md)
+Security testing matrix: [Security Testing](saasguard/security_tests.md)
 
 Current automated backend coverage includes:
 
@@ -259,26 +259,23 @@ Current automated backend coverage includes:
 
 Documented but not yet automated at the same depth:
 
-- issuer mismatch
-- audience mismatch
-- expired token rejection
-- JWKS / Keycloak drift handling
 - browser-based PKCE flow
 - frontend download regression
+- live Keycloak token-acquisition and discovery/JWKS integration coverage in CI
 
 ## Compliance
 
 Compliance mapping documents:
 
-- [docs/compliance-requirements.md](/home/darthdg/saasguard/docs/compliance-requirements.md)
-- [docs/compliance-audit.md](/home/darthdg/saasguard/docs/compliance-audit.md)
-- [docs/non-compliance-consequences.md](/home/darthdg/saasguard/docs/non-compliance-consequences.md)
+- [Compliance Requirements](saasguard/docs/compliance-requirements.md)
+- [Compliance Audit](saasguard/docs/compliance-audit.md)
+- [Non-Compliance Consequences](saasguard/docs/non-compliance-consequences.md)
 
 These documents map the current implementation to relevant control expectations such as SOC 2, CIS Controls, and OWASP guidance. They do not claim formal certification.
 
 ## Incident Response
 
-Incident runbook: [docs/incident-runbook.md](/home/darthdg/saasguard/docs/incident-runbook.md)
+Incident runbook: [Incident Runbook](saasguard/docs/incident-runbook.md)
 
 Current documented incident classes include:
 
@@ -291,9 +288,11 @@ Current documented incident classes include:
 
 ## Simulated Incident
 
-Simulation walkthrough: [docs/incident-simulation.md](/home/darthdg/saasguard/docs/incident-simulation.md)
+Simulation walkthrough: [Incident Simulation](saasguard/docs/incident-simulation.md)
 
 The current documented scenario is an OIDC issuer mismatch in the API configuration. It uses Grafana, Loki, and Uptime Kuma as the main detection surfaces and validates recovery by restoring authentication, tenant context, and successful export workflows.
+
+Recording: [incident-video.mp4](saasguard/incident-video.mp4)
 
 ## Repository Structure
 
@@ -313,14 +312,14 @@ security_tests.md       security testing matrix
 
 ## Final Submission Artifacts
 
-- Docker Compose: [docker-compose.yml](/home/darthdg/saasguard/docker-compose.yml)
-- CI/CD workflow: [.github/workflows/tests.yml](/home/darthdg/saasguard/.github/workflows/tests.yml)
-- OE dashboard verification: [docs/oe-dashboard-verification.md](/home/darthdg/saasguard/docs/oe-dashboard-verification.md)
-- Threat model: [docs/threat-model.md](/home/darthdg/saasguard/docs/threat-model.md)
-- Security testing: [security_tests.md](/home/darthdg/saasguard/security_tests.md)
-- Compliance requirements: [docs/compliance-requirements.md](/home/darthdg/saasguard/docs/compliance-requirements.md)
-- Compliance audit: [docs/compliance-audit.md](/home/darthdg/saasguard/docs/compliance-audit.md)
-- Non-compliance consequences: [docs/non-compliance-consequences.md](/home/darthdg/saasguard/docs/non-compliance-consequences.md)
-- Incident runbook: [docs/incident-runbook.md](/home/darthdg/saasguard/docs/incident-runbook.md)
-- Incident simulation: [docs/incident-simulation.md](/home/darthdg/saasguard/docs/incident-simulation.md)
-- Final readiness report: [docs/final-deliverables-readiness.md](/home/darthdg/saasguard/docs/final-deliverables-readiness.md)
+- Docker Compose: [Docker Compose](saasguard/docker-compose.yml)
+- CI/CD workflow: [GitHub Actions Workflow](.github/workflows/tests.yml)
+- OE dashboard verification: [OE Dashboard Verification](saasguard/docs/oe-dashboard-verification.md)
+- Threat model: [Threat Model](saasguard/docs/threat-model.md)
+- Security testing: [Security Testing](saasguard/security_tests.md)
+- Compliance requirements: [Compliance Requirements](saasguard/docs/compliance-requirements.md)
+- Compliance audit: [Compliance Audit](saasguard/docs/compliance-audit.md)
+- Non-compliance consequences: [Non-Compliance Consequences](saasguard/docs/non-compliance-consequences.md)
+- Incident runbook: [Incident Runbook](saasguard/docs/incident-runbook.md)
+- Incident simulation: [Incident Simulation](saasguard/docs/incident-simulation.md)
+- Final readiness report: [Final Readiness Report](saasguard/docs/final-deliverables-readiness.md)
